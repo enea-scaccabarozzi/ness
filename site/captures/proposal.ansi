@@ -1,0 +1,31 @@
+[0m[38;2;153;153;153m[48;2;55;55;55m❯ [0m[38;2;255;255;255m[48;2;55;55;55mI'd like two things: [0m[38;2;177;185;249m[48;2;55;55;55mtodo undo <n>[0m[38;2;255;255;255m[48;2;55;55;55m to mark a done item open again, and [0m[38;2;177;185;249m[48;2;55;55;55mtodo list --open[0m[38;2;255;255;255m[48;2;55;55;55m to show only open items. Two separate child [0m[48;2;55;55;55m      [0m
+[0m[48;2;55;55;55m  [0m[38;2;255;255;255m[48;2;55;55;55msessions in their own tabs so I can follow them, economy tier. Ask me before you integrate into main. What do you suggest?[0m[48;2;55;55;55m                [0m
+
+[0m[38;2;78;186;101m●[0m [0m[1mSkill[0m(ness-entry)
+[0m[38;2;153;153;153m  ⎿  [0mSuccessfully loaded skill
+
+  [0m[38;2;153;153;153mRan [0m[1m[38;2;153;153;153m2[0m[38;2;153;153;153m shell commands [0m
+
+[0m[38;2;255;255;255m● [0mI suggest a full session with two economy children, one per feature, and I wait for your yes before integrating either one.
+   
+  - [0m[1mSession:[0m this conversation becomes the root. Scope [0m[38;2;177;185;249mtodo-undo-open[0m, size [0m[38;2;177;185;249mfull[0m (it has to be full because a quick session can't have
+    children), root tier [0m[38;2;177;185;249mstandard[0m.
+  - [0m[1mChild [0m[1m[38;2;177;185;249mundo[0m (economy, Sonnet/medium, its own tab): adds [0m[38;2;177;185;249mtodo undo <n>[0m. It reuses the index lookup and error handling from [0m[38;2;177;185;249mdone <n>[0m, so a
+    bad index fails the same way, and it adds tests to [0m[38;2;177;185;249mmain_test.go[0m.
+  - [0m[1mChild [0m[1m[38;2;177;185;249mlist-open[0m (economy, Sonnet/medium, its own tab): adds [0m[38;2;177;185;249m--open[0m to [0m[38;2;177;185;249mlist[0m. It should work together with the existing [0m[38;2;177;185;249m--json[0m flag, and
+    it comes with tests.
+  - [0m[1mAutonomy:[0m each child works within its brief and hands off to me. I review each handoff and then ask you before running [0m[38;2;177;185;249mness integrate[0m
+    for either one.
+  - [0m[1mConflict risk:[0m both changes touch the command switch in [0m[38;2;177;185;249mmain.go[0m (97 lines) and [0m[38;2;177;185;249mmain_test.go[0m, so whichever lands second will probably
+    need a small rebase. I'll handle that before I ask you to integrate it.
+  - [0m[1mOne product call:[0m what should [0m[38;2;177;185;249mundo[0m do on an item that's already open? I'd make it an error, to match how [0m[38;2;177;185;249mdone[0m behaves. I'll mark that
+    PROVISIONAL unless you decide otherwise.
+
+  Each feature is only a few lines. If you'd rather not run two tabs, one quick economy session would do both for less. Since you asked for
+  two tabs, the plan above is my default.
+
+  Start it? 
+
+[0m[38;2;153;153;153m✻[0m [0m[38;2;153;153;153mBrewed for 15s · done 2:07 PM[0m
+
+[0m[38;2;153;153;153m[48;2;55;55;55m❯ [0m[38;2;255;255;255m[48;2;55;55;55myes[0m[48;2;55;55;55m                                                                                                                                       [0m

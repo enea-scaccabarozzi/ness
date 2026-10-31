@@ -1,0 +1,62 @@
+# ness worker install writes exactly ~/.config/systemd/user/ness-<project>.service with the
+# running binary's absolute path in ExecStart and the install-time PATH (herdr is in
+# ~/.local/bin, not in a user manager's PATH), reloads and enables the unit, and refuses without
+# a systemd user session; doctor then finds the unit install wrote; uninstall stops, disables and
+# removes it.
+# covers: R-WRK-002, R-WRK-003, R-WRK-004, R-WRK-006, R-DOC-005
+cd repo
+exec ness init --gate true --base main --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+fake output 'systemctl --user daemon-reload' ''
+fake output 'systemctl --user enable --now ness-repo' ''
+fake output 'systemctl --user restart ness-repo' ''
+fake output 'systemctl --user disable --now ness-repo' ''
+mkdir $HOME/.config/systemd/user
+snap home0 $HOME
+snap repo0 .
+# No user session: refused, nothing written anywhere.
+fake fail 'systemctl --user is-system-running' 'Failed to connect to bus: No medium found'
+exits 4 ness worker install
+stderr 'no systemd user session'
+samesnap home0 $HOME
+samesnap repo0 .
+fake output 'systemctl --user is-system-running' 'running'
+exec ness worker install
+stdout 'installed .*/\.config/systemd/user/ness-repo\.service'
+exists $HOME/.config/systemd/user/ness-repo.service
+exec grep '^ExecStart="/' $HOME/.config/systemd/user/ness-repo.service
+exec sh -c 'test "$(grep ^ExecStart= $HOME/.config/systemd/user/ness-repo.service)" = "ExecStart=\"$(readlink -f "$(which ness)")\" worker run"'
+exec sh -c 'test "$(grep ^Environment= $HOME/.config/systemd/user/ness-repo.service)" = "Environment=\"PATH=$PATH\""'
+exec sh -c 'grep "^WorkingDirectory=$(pwd -P)$" $HOME/.config/systemd/user/ness-repo.service'
+exec grep '^Restart=always$' $HOME/.config/systemd/user/ness-repo.service
+fake calls 'systemctl --user daemon-reload' 1
+fake calls 'systemctl --user enable --now ness-repo' 1
+samesnap repo0 .
+# The unit is the only new file outside the repository.
+rm $HOME/.config/systemd/user/ness-repo.service
+samesnap home0 $HOME
+exec ness worker install
+# A unit of another project (same basename) is refused by install and uninstall, and not touched.
+cp $HOME/.config/systemd/user/ness-repo.service ../unit-mine
+exec sh -c 'sed -i "s#^\# ness-unit project=.*#\# ness-unit project=/elsewhere/repo#" $HOME/.config/systemd/user/ness-repo.service'
+exec cp $HOME/.config/systemd/user/ness-repo.service ../unit-foreign
+exits 4 ness worker install
+stderr '/elsewhere/repo'
+exits 4 ness worker uninstall
+stderr '/elsewhere/repo'
+exec cmp $HOME/.config/systemd/user/ness-repo.service ../unit-foreign
+cp ../unit-mine $HOME/.config/systemd/user/ness-repo.service
+# Doctor parses the unit install wrote: the same binary.
+env NESS_TEST_NOW=2026-10-08T10:00:00Z
+store heartbeat 5 0.1.0
+exec ness doctor
+stdout '^ok\tworker-binary\tunit runs /'
+stdout '^ok\tsystemd\t'
+# A degraded user session still runs units: install proceeds.
+fake output 'systemctl --user is-system-running' 'degraded'
+exec ness worker install
+exec ness worker uninstall
+! exists $HOME/.config/systemd/user/ness-repo.service
+fake calls 'systemctl --user disable --now ness-repo' 1
+samesnap home0 $HOME

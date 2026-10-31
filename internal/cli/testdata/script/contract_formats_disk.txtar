@@ -1,0 +1,32 @@
+# An extractor that reads the file from disk instead of stdin would judge the worktree text against
+# itself. The file under test is not in the export the command runs in, so such an extractor fails
+# closed rather than making a project-wide lock vacuous.
+# covers: R-CTR-048, R-CTR-053
+cd repo
+exec ness init --gate true --base main --yes
+exec sh -c 'cat ../cfg.toml >> .ness/ness.toml'
+exec sh -c 'mkdir -p tools proj && cp ../disk.sh tools/disk.sh && chmod +x tools/disk.sh && cp ../p.fmt proj/p.fmt'
+exec git add -A
+exec git commit -q -m 'ness init'
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+env NESS_SESSION=$R
+exec sh -c 'cd .worktrees/r-* && sed -i "s/unit x: ex/unit x: WEAK/" proj/p.fmt'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stderr 'proj/p\.fmt'
+
+-- b.md --
+b
+-- cfg.toml --
+features = ["contracts"]
+[contracts]
+frozen = ["proj/*.fmt"]
+[contracts.formats.disk]
+match = ["proj/*.fmt"]
+units = "tools/disk.sh"
+-- disk.sh --
+#!/bin/sh
+cat >/dev/null
+sed -n 's/^unit \([^:]*\): \(.*\)$/{"id":"\1","body":"\2"}/p' "$1"
+-- p.fmt --
+unit x: ex

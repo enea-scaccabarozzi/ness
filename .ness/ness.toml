@@ -1,0 +1,14 @@
+ness = "0.1"
+project = "Ness"
+base = "main"
+profiles = ["go-strict", "local"]
+features = ["notify"]
+gate = "make validate"
+
+[notify]
+operator = "phone"
+
+[notify.channels.phone]
+kind = "telegram"
+token = "secret:telegram-token"       # ness secret set telegram-token (CX-22)
+chat_id = "secret:telegram-chat"

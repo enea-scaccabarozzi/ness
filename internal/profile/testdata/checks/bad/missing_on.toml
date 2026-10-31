@@ -1,0 +1,9 @@
+# want: on
+name = "local"
+
+[[checks]]
+id = "c1"
+skill = "ness-entry"
+section = "Communicate"
+message = "fix it"
+kind = "checkpoint-since-landing"

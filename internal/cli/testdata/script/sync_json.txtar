@@ -1,0 +1,42 @@
+# settings.json keeps every unowned byte; an equal unrecorded key is adopted; ness hook entries
+# are found by command, never duplicated; the lock lists exactly the owned key paths; the
+# wrapped hook command is silent without ness.
+# covers: R-SYNC-050, R-SYNC-051, R-SYNC-053, R-SYNC-054, R-SYNC-067, R-HOOK-001
+cd repo
+exec ness sync
+stdout '^adopt \.claude/settings\.json:autoCompactWindow$'
+grep '\A\{\n    "model":   "x",\n    "autoCompactWindow": 265000,' .claude/settings.json
+grep 'echo mine' .claude/settings.json
+grep -count=1 'ness hook session-start' .claude/settings.json
+exec ness sync
+grep -count=1 'ness hook session-start' .claude/settings.json
+grep -count=4 '"id": "\.claude/settings\.json:' .ness/lock.json
+grep '"id": "\.claude/settings\.json:env\.CLAUDE_CODE_SUBAGENT_MODEL"' .ness/lock.json
+grep -count=2 'command -v ness >/dev/null \|\| exit 0; ness hook [a-z-]+' .claude/settings.json
+# Run each hook command ness wrote with ness absent from PATH: silent, exit 0.
+exec grep -o 'command -v ness[^"]*' .claude/settings.json
+cp stdout ../cmds.txt
+grep -count=2 'ness hook' ../cmds.txt
+# With ness on PATH the wired command passes the hook's exit 0 through (Task 8 adds the block).
+stdin ../cmds.txt
+exec /bin/sh -c 'while IFS= read -r l; do /bin/sh -c "$l" </dev/null || exit 1; done'
+stdout '^ness: this conversation is not a ness session yet'
+! stderr .
+mkdir ../emptybin
+env PATH=$WORK/emptybin
+stdin ../cmds.txt
+exec /bin/sh -c 'while IFS= read -r l; do /bin/sh -c "$l" </dev/null || exit 1; done'
+! stdout .
+! stderr .
+
+-- repo/.ness/ness.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"
+-- repo/.claude/settings.json --
+{
+    "model":   "x",
+    "autoCompactWindow": 265000,
+  "hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": "echo mine"}]}]}
+}

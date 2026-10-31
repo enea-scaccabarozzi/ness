@@ -1,0 +1,33 @@
+# The binary refuses to run outside the project's pin, naming the range, its version and its path.
+# covers: R-CFG-011, R-CFG-012, R-CFG-013
+cd repo
+env NESS_TEST_VERSION=0.3.0
+exits 1 ness sync --check
+env NESS_TEST_VERSION=0.3.7
+exits 1 ness sync --check
+env NESS_TEST_VERSION=0.2.9
+exits 4 ness sync --check
+stderr 'pins ness 0\.3\.x'
+stderr '0\.2\.9'
+stderr 'binary: /'
+env NESS_TEST_VERSION=0.4.0
+exits 4 ness sync --check
+
+cp ../one.toml .ness/ness.toml
+env NESS_TEST_VERSION=1.5.1
+exits 1 ness sync --check
+env NESS_TEST_VERSION=2.0.0
+exits 4 ness sync --check
+env NESS_TEST_VERSION=1.1.9
+exits 4 ness sync --check
+
+-- repo/.ness/ness.toml --
+ness = "0.3"
+project = "p"
+base = "main"
+gate = "true"
+-- one.toml --
+ness = "1.2"
+project = "p"
+base = "main"
+gate = "true"

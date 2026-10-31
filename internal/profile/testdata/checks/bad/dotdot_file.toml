@@ -1,0 +1,13 @@
+# want: file
+name = "local"
+
+[[checks]]
+id = "c1"
+on = "open"
+skill = "ness-entry"
+section = "Communicate"
+message = "fix it"
+kind = "section-matches"
+file = "../a.md"
+heading = "Autonomy"
+require = ["x"]

@@ -1,0 +1,11 @@
+# The binary reports its version, with the commit it was built from as build metadata, and an
+# unknown command is a usage error.
+# covers: R-QA-001, R-QA-046
+exec ness --version
+stdout '^ness version 0.1.0$'
+env NESS_TEST_BUILD=7fcaae9122ee.dirty
+exec ness --version
+stdout '^ness version 0\.1\.0\+7fcaae9122ee\.dirty$'
+env NESS_TEST_BUILD=
+exits 2 ness nope
+stderr 'unknown command'

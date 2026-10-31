@@ -1,0 +1,131 @@
+# ness reply answers and disposes in one step: the default is resolved, the answer reaches the
+# sender as a reply item with no obligation, a disposed item cannot be replied again, deferred
+# stays listed and can be answered later, only the addressee (or, for operator items, the
+# operator, the sender or the sender's manager) may reply, the sender recording an answer gets no
+# reply item, the idempotency key survives disposal, and an unknown item is refused.
+# covers: R-MSG-014, R-MSG-020, R-MSG-021, R-MSG-022, R-MSG-023, R-MSG-024, R-MSG-025, R-MSG-043, R-MSG-052
+cd repo
+exec ness init --gate true --base main --yes
+store add-session s-aaaaaaaaaaaa root
+store add-session s-bbbbbbbbbbbb child-b s-aaaaaaaaaaaa
+store add-session s-cccccccccccc child-c s-aaaaaaaaaaaa
+env NESS_TEST_NOW=2026-10-08T10:00:00Z
+env NESS_SESSION=s-bbbbbbbbbbbb
+exec ness send --to manager --body 'may I merge?'
+store last s-aaaaaaaaaaaa REQ
+# Default disposition resolved; answer stored; the sender gets a reply item; the body is not echoed.
+env NESS_SESSION=s-aaaaaaaaaaaa
+exec ness reply $REQ --body 'yes, merge'
+stdout '^replied m-[a-z2-7]{8} as resolved$'
+! stdout 'yes, merge'
+! stderr .
+store item $REQ disposition=resolved 'answer=yes, merge'
+store items s-aaaaaaaaaaaa 0
+env NESS_SESSION=s-bbbbbbbbbbbb
+exec ness inbox
+stdout '^m-[a-z2-7]{8}\ts-aaaaaaaaaaaa\treply\t0m\tyes, merge$'
+store last s-bbbbbbbbbbbb REP
+store item $REP intent=reply sender=s-aaaaaaaaaaaa recipient=s-bbbbbbbbbbbb
+# A second reply is refused and the first answer stays.
+env NESS_SESSION=s-aaaaaaaaaaaa
+exits 4 ness reply $REQ --body 'changed my mind'
+stderr 'already resolved'
+store item $REQ 'answer=yes, merge'
+# The same send after resolution is still the same item: nothing new is listed.
+env NESS_SESSION=s-bbbbbbbbbbbb
+exec ness send --to manager --body 'may I merge?'
+stdout '^already sent m-[a-z2-7]{8}$'
+store items s-aaaaaaaaaaaa 0
+# --as values: deferred stays listed and marked, then can be declined; accepted; a bad value is a
+# usage error; an empty body is a usage error.
+exec ness send --to manager --body q2
+store last s-aaaaaaaaaaaa Q2
+exec ness send --to manager --body q3
+store last s-aaaaaaaaaaaa Q3
+env NESS_SESSION=s-aaaaaaaaaaaa
+exec ness reply $Q2 --body later --as deferred
+stdout '^replied m-[a-z2-7]{8} as deferred$'
+exec ness inbox
+stdout '^m-[a-z2-7]{8}\ts-bbbbbbbbbbbb\trequest deferred\t0m\tq2$'
+exec ness reply $Q2 --body no --as declined
+store item $Q2 disposition=declined answer=no
+exec ness reply $Q3 --body ok --as accepted
+store item $Q3 disposition=accepted
+store items s-aaaaaaaaaaaa 0
+exits 2 ness reply $Q3 --body x --as maybe
+stderr 'accepted values are resolved | declined | deferred | accepted | returned | withdrawn'
+exits 2 ness reply $Q3 --body ''
+# A reply to an fyi takes it off the list (R-MSG-041 path through reply).
+env NESS_SESSION=s-bbbbbbbbbbbb
+exec ness send --to manager --body heads-up --intent fyi
+store last s-aaaaaaaaaaaa FYI
+env NESS_SESSION=s-aaaaaaaaaaaa
+exec ness reply $FYI --body noted
+store items s-aaaaaaaaaaaa 0
+# A child may not reply to its sibling's item; nothing changes (Review Focus 5).
+exec ness send --to s-cccccccccccc --body 'for c'
+store last s-cccccccccccc FORC
+env NESS_SESSION=s-bbbbbbbbbbbb
+exits 4 ness reply $FORC --body hi
+stderr 'addressed to s-cccccccccccc, not to you'
+store item $FORC disposition=
+# Operator items: the operator (no session) replies; a root records a chat answer; a child cannot.
+env NESS_SESSION=s-aaaaaaaaaaaa
+exec ness send --to operator --body 'op q1'
+store last operator OP1
+exec ness send --to operator --body 'op q2'
+store last operator OP2
+# A child may not reply to an open operator item; nothing changes (R-MSG-023).
+env NESS_SESSION=s-bbbbbbbbbbbb
+exits 4 ness reply $OP2 --body nope
+stderr 'addressed to operator, not to you'
+store item $OP2 disposition=
+env NESS_SESSION=
+exec ness reply $OP1 --body 'operator says yes'
+store item $OP1 disposition=resolved
+env NESS_SESSION=s-aaaaaaaaaaaa
+exec ness inbox
+stdout '^m-[a-z2-7]{8}\toperator\treply\t0m\toperator says yes$'
+exec ness reply $OP2 --body 'operator said no in chat' --as declined
+store item $OP2 disposition=declined 'answer=operator said no in chat'
+# The root recorded its own item's answer: no reply item came back to it.
+exec ness inbox
+! stdout 'operator said no in chat'
+# A child asks the operator and records the answer given in its chat (CX-17): disposed, no reply
+# item back; the operator's own answer to another item does reach the child as a reply; the
+# child's manager may answer; a sibling root may not.
+env NESS_SESSION=s-bbbbbbbbbbbb
+exec ness send --to operator --body 'child q1' --intent decision
+store last operator CQ1
+exec ness send --to operator --body 'child q2' --intent decision
+store last operator CQ2
+exec ness send --to operator --body 'child q3' --intent decision
+store last operator CQ3
+exec ness inbox
+exec ness reply $CQ1 --body 'operator said go in my chat'
+store item $CQ1 disposition=resolved 'answer=operator said go in my chat'
+exec ness inbox
+! stdout 'operator said go'
+env NESS_SESSION=
+exec ness reply $CQ2 --body 'operator answers q2'
+env NESS_SESSION=s-bbbbbbbbbbbb
+exec ness inbox
+stdout '^m-[a-z2-7]{8}\toperator\treply\t0m\toperator answers q2$'
+store add-session s-eeeeeeeeeeee other-root
+env NESS_SESSION=s-eeeeeeeeeeee
+exits 4 ness reply $CQ3 --body 'not mine'
+stderr 'addressed to operator, not to you'
+store item $CQ3 disposition=
+env NESS_SESSION=s-aaaaaaaaaaaa
+exec ness reply $CQ3 --body 'manager relays the answer'
+store item $CQ3 disposition=resolved
+env NESS_SESSION=s-bbbbbbbbbbbb
+exec ness inbox
+stdout '^m-[a-z2-7]{8}\ts-aaaaaaaaaaaa\treply\t0m\tmanager relays the answer$'
+# Unknown item.
+exits 4 ness reply m-nope --body x
+stderr 'no item m-nope'
+# An unknown NESS_SESSION refuses reply (Review Focus 4).
+env NESS_SESSION=s-ffffffffffff
+exits 4 ness reply $REQ --body x
+stderr 'not a session of this project'

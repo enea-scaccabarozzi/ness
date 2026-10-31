@@ -1,0 +1,23 @@
+# example-release renders one chain as text: integrate, a post-push CI probe, notify; its probe
+# parses and runs GREEN against a fixture gh; the text promotes with integrate --from/--into.
+# covers: R-BLT-001, R-BLT-091, R-BLT-093
+cd repo
+exec ness init --gate true --base main --profile example-release --yes
+exec ness sync --check
+exists .agents/skills/ness-probes/SKILL.md
+exists .agents/skills/ness-notify/SKILL.md
+grep 'integrate --from main --into prod' .agents/skills/ness-example-release/SKILL.md
+grep 'ness probe start probes/ci-after-push.md' .agents/skills/ness-example-release/SKILL.md
+grep 'ness post --channel releases' .agents/skills/ness-example-release/SKILL.md
+exists docs/release-notes/TEMPLATE.md
+grep '^## Running sessions' docs/release-notes/TEMPLATE.md
+mkdir ../bin
+exec sh -c 'printf "#!/bin/sh\necho \"\$*\" > \"%s/gh.args\"\necho success\n" "$WORK" > ../bin/gh && chmod +x ../bin/gh'
+env PATH=$WORK/bin:$PATH
+exec ness probe run probes/ci-after-push.md
+stdout '^GREEN$'
+stdout 'conclusion=success'
+grep '^run list --branch main --limit 1 --json conclusion --jq' $WORK/gh.args
+exec sh -c 'printf "#!/bin/sh\necho failure\n" > ../bin/gh'
+exits 1 ness probe run probes/ci-after-push.md
+stdout '^RED$'

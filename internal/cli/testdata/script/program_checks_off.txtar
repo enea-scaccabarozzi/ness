@@ -1,0 +1,17 @@
+# A project without the program profile is unaffected by program's checks: a child opens with no
+# roadmap, no recorded autonomy and no checkpoint, and integrates a decisions.md with ids.
+# covers: R-BLT-110
+cd repo
+exec ness init --gate true --base main --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+exec sh -c 'cd .worktrees/r-* && NESS_SESSION=$R ness open --scope c --tier standard --brief "$WORK/b.md"'
+stdout '^opened s-[0-9a-f]{12} scope c '
+store last-session C
+exec sh -c 'cd .worktrees/c-* && printf "## Lessons\\nNone.\\n" > docs/sessions/r/c/report.md && printf -- "- **D1** x\\nC2-D7 y\\n" > docs/sessions/r/c/decisions.md && git add -A && git commit -q -m c && NESS_SESSION=$C ness integrate --subject "feat: c"'
+stdout '^integrated '
+
+-- b.md --
+b

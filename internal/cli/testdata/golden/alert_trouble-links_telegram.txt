@@ -1,0 +1,4 @@
+🔴 <b>Trouble</b> · example-lab
+<b><a href="https://claude.ai/code/session_01AbC">weekly-review-plan</a></b>
+
+is blocked on a prompt in its tab

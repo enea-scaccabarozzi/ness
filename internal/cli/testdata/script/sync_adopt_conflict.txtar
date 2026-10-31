@@ -1,0 +1,43 @@
+# Unrecorded targets: identical content is adopted; different content is a conflict that keeps
+# the user's bytes, writes the render beside them, and does not stop the rest of the sync.
+# covers: R-SYNC-011, R-SYNC-012, R-SYNC-016, R-SYNC-022, R-SYNC-024
+cd repo
+exits 3 ness sync
+stdout '^adopt docs/x.md$'
+stdout '^conflict docs/y.md: merge docs/y.md.ness-new'
+stdout '^conflict docs/z.md: merge docs/z.md.ness-new'
+stdout '^create AGENTS.md#core/router$'
+cmp docs/y.md ../mine.txt
+cmp docs/y.md.ness-new .ness/profiles/local/y.md
+grep '"id": "docs/x.md"' .ness/lock.json
+! grep '"id": "docs/y.md"' .ness/lock.json
+# A pending conflict keeps failing until it is resolved.
+exits 3 ness sync
+exits 3 ness sync --check
+
+-- repo/.ness/ness.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"
+profiles = ["local"]
+-- repo/.ness/profiles/local/profile.toml --
+name = "local"
+[files]
+"docs/x.md" = { own = "x.md" }
+"docs/y.md" = { own = "y.md" }
+"docs/z.md" = { own = "z.md" }
+-- repo/.ness/profiles/local/x.md --
+x
+-- repo/.ness/profiles/local/y.md --
+y
+-- repo/.ness/profiles/local/z.md --
+z
+-- repo/docs/x.md --
+x
+-- repo/docs/y.md --
+mine
+-- repo/docs/z.md --
+mine
+-- mine.txt --
+mine

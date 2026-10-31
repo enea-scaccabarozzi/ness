@@ -1,0 +1,31 @@
+# For a bound session, pre-tool refuses shell backgrounding and a pgrep -f wait loop with exit 2
+# and a message naming run_in_background; && passes silently; unbound, everything passes.
+# covers: R-HOOK-020, R-HOOK-021, R-HOOK-014
+cd repo
+exec ness init --gate true --base main --yes
+store add-session s-aaaaaaaaaaaa root
+env NESS_SESSION=s-aaaaaaaaaaaa
+stdin ../bg.json
+exits 2 ness hook pre-tool
+stderr 'run_in_background'
+stderr 'skill ness-[a-z-]+, section [A-Z]'
+stdin ../pgrep.json
+exits 2 ness hook pre-tool
+stderr 'run_in_background'
+stderr 'skill ness-[a-z-]+, section [A-Z]'
+stdin ../and.json
+exec ness hook pre-tool
+! stdout .
+! stderr .
+env NESS_SESSION=
+stdin ../bg.json
+exec ness hook pre-tool
+! stdout .
+! stderr .
+
+-- bg.json --
+{"tool_name":"Bash","tool_input":{"command":"( make > o.log 2>&1 ) &"}}
+-- pgrep.json --
+{"tool_name":"Bash","tool_input":{"command":"until ! pgrep -f 'pilot.py 500'; do sleep 10; done"}}
+-- and.json --
+{"tool_name":"Bash","tool_input":{"command":"a && b"}}

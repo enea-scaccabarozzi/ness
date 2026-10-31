@@ -1,0 +1,43 @@
+     ok      todo    0.004s
+     integrated session/todo-undo-open-51faa1fd840a into main at 1f722a26a0d3029cc25403576f1e697c5040e07e
+[0m[38;2;153;153;153m  ⎿  [0mCreated [0m[1mdocs/sessions/todo-undo-open/report.md[0m [0m[38;2;153;153;153m(+13 -0)[0m
+     [0m[38;2;80;200;80m[48;2;2;40;0m  1 +[0m[38;2;248;248;242m[48;2;2;40;0m# Report: todo-undo-open                                                                                                    [0m
+     [0m[38;2;80;200;80m[48;2;2;40;0m  2 +[0m[38;2;248;248;242m[48;2;2;40;0m                                                                                                                            [0m
+     [0m[38;2;80;200;80m[48;2;2;40;0m  3 +[0m[38;2;248;248;242m[48;2;2;40;0m## Delivered                                                                                                                [0m
+     [0m[38;2;80;200;80m[48;2;2;40;0m  4 +[0m[38;2;248;248;242m[48;2;2;40;0m- `todo undo <n>`: marks item n open. Already-open item is a no-op (operator decision, matches `done`). Bad index errors lik[0m
+     [0m[38;2;80;200;80m[48;2;2;40;0m    +[0m[38;2;248;248;242m[48;2;2;40;0me `done`. Child `undo` (s-8446bf13aa78, 3651d56).                                                                           [0m
+     [0m[38;2;80;200;80m[48;2;2;40;0m  5 +[0m[38;2;248;248;242m[48;2;2;40;0m- `todo list --open`: only open items, original numbering kept, combines with `--json` in any order; unknown list flags now [0m
+     [0m[38;2;80;200;80m[48;2;2;40;0m    +[0m[38;2;248;248;242m[48;2;2;40;0merror (operator decision: keep). Child `list-open` (s-0c8a4af43c06, 2b6c5d1).                                               [0m
+     [0m[38;2;80;200;80m[48;2;2;40;0m  6 +[0m[38;2;248;248;242m[48;2;2;40;0m- Root merged both, resolved usage-line and test conflicts, applied the no-op change.                                       [0m
+     [0m[38;2;80;200;80m[48;2;2;40;0m  7 +[0m[38;2;248;248;242m[48;2;2;40;0m                                                                                                                            [0m
+     [0m[38;2;80;200;80m[48;2;2;40;0m  8 +[0m[38;2;248;248;242m[48;2;2;40;0m## Evidence                                                                                                                 [0m
+     [0m[38;2;80;200;80m[48;2;2;40;0m  9 +[0m[38;2;248;248;242m[48;2;2;40;0m- `go vet ./...` and `go test ./...` pass on the merged root branch (TestUndo covers no-op, bad index; TestListOpen covers t[0m
+     [0m[38;2;80;200;80m[48;2;2;40;0m    +[0m[38;2;248;248;242m[48;2;2;40;0mext and JSON).                                                                                                              [0m
+     [0m[38;2;80;200;80m[48;2;2;40;0m 10 +[0m[38;2;248;248;242m[48;2;2;40;0m- Operator approved integration in chat: "3: yes, integrate."                                                               [0m
+     [0m[38;2;80;200;80m[48;2;2;40;0m 11 +[0m[38;2;248;248;242m[48;2;2;40;0m                                                                                                                            [0m
+     [0m[38;2;80;200;80m[48;2;2;40;0m 12 +[0m[38;2;248;248;242m[48;2;2;40;0m## Lessons                                                                                                                  [0m
+     [0m[38;2;80;200;80m[48;2;2;40;0m 13 +[0m[38;2;248;248;242m[48;2;2;40;0m- Root's brief claimed `done` errors on an already-done item; it does not. Check premises against the code before writing th[0m
+     [0m[38;2;80;200;80m[48;2;2;40;0m    +[0m[38;2;248;248;242m[48;2;2;40;0mem into a child brief. The undo child caught it.                                                                            [0m
+[0m[38;2;153;153;153m  ⎿  Allowed by auto mode[0m
+
+  [0m[38;2;153;153;153mRan [0m[1m[38;2;153;153;153m1[0m[38;2;153;153;153m shell command [0m
+
+[0m[38;2;255;255;255m●[0m Both features are on main at 1f722a2. The children won't close yet because neither wrote a report, so I'm asking them to.
+
+  [0m[38;2;153;153;153mRan [0m[1m[38;2;153;153;153m1[0m[38;2;153;153;153m shell command [0m
+     
+[0m[38;2;255;255;255m●[0m Both features are now on main as one commit, 1f722a2, and the tests passed in the merge check.
+     
+  - [0m[1m[38;2;177;185;249mtodo undo <n>[0m reopens a done item. On an item that's already open it does nothing, as you chose. A bad index fails the same way as with
+    [0m[38;2;177;185;249mdone[0m.
+  - [0m[1m[38;2;177;185;249mtodo list --open [0mshows only open items, keeps their original numbers, and works with [0m[38;2;177;185;249m--json[0m. Unknown [0m[38;2;177;185;249mlist [0mflags are now an error, as you
+    chose.
+
+  I merged the two branches myself, fixed the conflicts in the usage line and the tests, and made the [0m[38;2;177;185;249mundo[0m change before integrating.
+  
+  The two children aren't closed yet. [0m[38;2;177;185;249mness close [0mneeds a report from each, and neither wrote one, so I've asked them to. I'll close them when
+  they reply.
+     
+  Your session is integrated; say "close it" when you like, or leave it open.
+
+[0m[38;2;153;153;153m✻[0m [0m[38;2;153;153;153mCogitated for 36s · done 2:11 PM[0m

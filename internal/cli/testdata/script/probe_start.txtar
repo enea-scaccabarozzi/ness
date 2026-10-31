@@ -1,0 +1,108 @@
+# start takes files or a directory and registers each probe with the caller as owner; the
+# operator and a bad file are refused before anything is registered; two owners of one path are
+# two probes and stop stops only the caller's; stop needs --note; status lists the probes with
+# state and evidence, in text and JSON; a probe with notify set needs the notify feature.
+# covers: R-PRB-060, R-PRB-067, R-PRB-068, R-PRB-084, R-SESS-081, R-CFG-054
+cd repo
+exec ness init --gate true --base main --yes
+exec sh -c 'printf "features = [\"probes\"]\n" >> .ness/ness.toml'
+exec git add -A
+exec git commit -q -m 'ness init'
+exec ness status
+stdout '^probes: none$'
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+exec sh -c 'cd .worktrees/r-* && NESS_SESSION=$R ness open --scope c --tier standard --brief ../../../b.md'
+store last-session C
+exec sh -c 'cd .worktrees/r-* && mkdir -p probes && cp ../../../a.md ../../../b2.md probes/ && cp ../../../bad.md ../../../notify.md ../../../gh.md .'
+# The operator owns nothing.
+exits 4 sh -c 'cd .worktrees/r-* && ness probe start probes/a.md'
+stderr 'needs a session'
+env NESS_SESSION=$R
+# A bad file refuses the whole start.
+exits 4 sh -c 'cd .worktrees/r-* && ness probe start probes/a.md bad.md'
+stderr 'bad\.md: unknown field evry'
+store probes 0
+# notify: auto needs the notify feature.
+exits 4 sh -c 'cd .worktrees/r-* && ness probe start notify.md'
+stderr 'feature notify is off'
+# A github channel cannot carry a probe's thread.
+exec sh -c 'cd .worktrees/r-* && sed -i "s/features = \\[\"probes\"\\]/features = [\"probes\", \"notify\"]/" .ness/ness.toml && cat ../../../gh.toml >> .ness/ness.toml'
+exits 4 sh -c 'cd .worktrees/r-* && ness probe start gh.md'
+stderr 'channel gh is a github channel; probes post to threads, github posts to issues'
+store probes 0
+exec sh -c 'cd .worktrees/r-* && git checkout .ness/ness.toml'
+# A directory registers both.
+env NESS_TEST_NOW=2026-10-09T10:00:00Z
+exec sh -c 'cd .worktrees/r-* && ness probe start probes'
+stdout '^started probes/a\.md owner s-[0-9a-f]{12} next 2026-10-09T10:00:00Z$'
+stdout '^started probes/b2\.md owner s-[0-9a-f]{12}'
+store probes 2
+store probe probes/a.md $R state=active owner=$R runs=0
+exec ness status
+stdout '^probe\tprobes/a\.md\ts-[0-9a-f]{12}\tactive\t-\t$'
+stdout '^probe\tprobes/b2\.md\t'
+exec ness status --json
+stdout '"path": "probes/a.md"'
+stdout '"state": "active"'
+# The worker runs the floor: status shows the state and the evidence.
+exec ness worker run --once
+exec ness status
+stdout '^probe\tprobes/a\.md\ts-[0-9a-f]{12}\tactive\tGREEN\tn=1$'
+# A directory without probe files, or with several, is refused by the commands that take one.
+exec sh -c 'cd .worktrees/r-* && mkdir empty'
+exits 4 sh -c 'cd .worktrees/r-* && ness probe run empty'
+stderr 'empty has no \*\.md probe files'
+exits 4 sh -c 'cd .worktrees/r-* && ness probe stop empty --note x'
+stderr 'no \*\.md probe files'
+exits 4 sh -c 'cd .worktrees/r-* && ness probe start empty'
+exits 4 sh -c 'cd .worktrees/r-* && ness probe run probes'
+stderr 'holds 2 probe files'
+# A second owner of the same path is a second probe; its stop leaves the first.
+env NESS_SESSION=$C
+exec sh -c 'cd .worktrees/c-* && mkdir -p probes && cp ../../../a.md probes/ && ness probe start probes/a.md'
+store probes 3
+exits 2 sh -c 'cd .worktrees/c-* && ness probe stop probes/a.md'
+stderr 'note is required'
+exec sh -c 'cd .worktrees/c-* && ness probe stop probes/a.md --note "done looking"'
+stdout '^stopped probes/a\.md'
+store probes 2
+store probe probes/a.md $R state=active
+exits 4 sh -c 'cd .worktrees/c-* && ness probe stop probes/a.md --note again'
+stderr 'no active probe'
+
+-- b.md --
+b
+-- a.md --
+---
+every: 30m
+floor: echo n=1
+expect: n>=1
+---
+scope a
+-- b2.md --
+---
+every: 1h
+---
+scope b
+-- bad.md --
+---
+evry: 30m
+---
+-- gh.toml --
+[notify.channels.gh]
+kind = "github"
+token = "env:GH_TOKEN"
+repo = "o/r"
+-- gh.md --
+---
+every: 30m
+notify: auto
+channel: gh
+---
+-- notify.md --
+---
+every: 30m
+notify: auto
+channel: rel
+---

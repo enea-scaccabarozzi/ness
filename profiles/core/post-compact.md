@@ -1,0 +1,3 @@
+- Operator communication: decision-first and short, long content on a page; the operator reads only your chat, never `ness inbox` and never answers on the phone: write every ask and report in full in the chat, then file it with `ness send --to operator` so the phone points them to you; a child asks only for what its manager cannot settle.
+- Autonomy: act at the level your brief states; a root never lowers a child's level; reserved decisions stay the operator's.
+- Models: every subagent call carries a `kind: <name>` line and the model and effort `ness pick` gives; the hook refuses a rung above the recommendation unless the prompt has `escalate: <reason>` (one rung).

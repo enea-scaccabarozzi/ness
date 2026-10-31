@@ -1,0 +1,6 @@
+Done. The band study is written up in docs/sessions/x/report.md.
+────────────────
+❯ 
+────────────────
+  Fable 5.1 | l0b-band | effort: med | 5h 8% @16:20 | 7d 6%
+  ⏵⏵ bypass permissions on · 1 shell · ← for agents

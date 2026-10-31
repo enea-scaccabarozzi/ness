@@ -1,0 +1,84 @@
+# The --json output is pinned byte for byte: fixed ids, fixed clock, item ids normalised.
+# covers: R-CFG-037, R-SESS-080, R-SESS-086, R-WRK-099
+cd repo
+exec ness init --gate true --base main --yes
+env NESS_TEST_NOW=2026-10-08T10:00:00Z
+store add-session s-aaaaaaaaaaaa prog
+store add-session s-bbbbbbbbbbbb kid s-aaaaaaaaaaaa
+store phase s-aaaaaaaaaaaa ready
+store phase s-bbbbbbbbbbbb ready
+store heartbeat 12 0.1.0
+env NESS_SESSION=s-bbbbbbbbbbbb
+exec ness send --to manager --body 'need a decision' --intent decision
+env NESS_SESSION=
+exec sh -c 'ness status --json | sed "s/m-[a-z2-7]\{8\}/m-ITEM/" > ../got.json'
+cmp ../got.json ../golden.json
+
+-- golden.json --
+{
+  "schema": 1,
+  "sessions": [
+    {
+      "id": "s-aaaaaaaaaaaa",
+      "parent": "operator",
+      "scope": "prog",
+      "title": "prog",
+      "tier": "",
+      "size": "full",
+      "effort": "",
+      "client": "claude",
+      "phase": "ready",
+      "closed": false,
+      "context_tokens": null,
+      "idle_minutes": null,
+      "obligations": [
+        {
+          "id": "m-ITEM",
+          "from": "s-bbbbbbbbbbbb"
+        }
+      ],
+      "waits": [],
+      "integrated": "",
+      "worktree": "",
+      "branch": "",
+      "pane": "",
+      "client_session": "",
+      "depth": 0
+    },
+    {
+      "id": "s-bbbbbbbbbbbb",
+      "parent": "s-aaaaaaaaaaaa",
+      "scope": "kid",
+      "title": "kid",
+      "tier": "",
+      "size": "",
+      "effort": "",
+      "client": "claude",
+      "phase": "ready",
+      "closed": false,
+      "context_tokens": null,
+      "idle_minutes": null,
+      "obligations": [],
+      "waits": [
+        {
+          "kind": "item",
+          "ref": "m-ITEM",
+          "note": "to s-aaaaaaaaaaaa",
+          "until": ""
+        }
+      ],
+      "integrated": "",
+      "worktree": "",
+      "branch": "",
+      "pane": "",
+      "client_session": "",
+      "depth": 1
+    }
+  ],
+  "probes": [],
+  "worker": {
+    "running": true,
+    "version": "0.1.0",
+    "heartbeat_age_seconds": 12
+  }
+}

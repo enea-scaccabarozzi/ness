@@ -1,0 +1,18 @@
+# behavior-specs requires go-strict (refused alone, naming both), enables contracts and renders
+# its skill and the specify invoke.
+# covers: R-BLT-001, R-BLT-070, R-BLT-072
+[!exec:golangci-lint] skip 'go-strict needs golangci-lint on PATH'
+[!exec:python3] skip 'go-strict needs python3 on PATH'
+cd repo
+snap before
+exits 4 ness init --gate true --base main --profile behavior-specs --yes
+stderr 'behavior-specs'
+stderr 'go-strict'
+samesnap before
+exec ness init --gate true --base main --profile go-strict --profile behavior-specs --yes
+exec ness sync --check
+grep '^name: ness-behavior-specs$' .agents/skills/ness-behavior-specs/SKILL.md
+grep 'one `When`' .agents/skills/ness-behavior-specs/SKILL.md
+grep 'ness contract freeze' .agents/skills/ness-behavior-specs/SKILL.md
+exists .agents/skills/ness-contracts/SKILL.md
+grep '^  - invoke /ness-behavior-specs$' .agents/skills/ness-entry/SKILL.md

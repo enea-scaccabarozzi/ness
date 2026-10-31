@@ -1,0 +1,74 @@
+# A child's integrate defaults --from to its branch and --into to its manager's and
+# fast-forwards the manager's worktree; a root's lands in base; the gate runs in a throwaway
+# worktree that is removed; the store records the sha; nothing is pushed unless configured;
+# a dirty source refuses; an untracked file in the manager's worktree (its brief) does not.
+# covers: R-SESS-090, R-SESS-091, R-SESS-093, R-SESS-098, R-SESS-099, R-SESS-100, R-SESS-103, R-SESS-104, R-SESS-105
+cd repo
+exec ness init --gate 'pwd > $WORK/gate-cwd' --base main --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+exec git init -q --bare ../remote
+exec git remote add origin ../remote
+exec git push -q origin main
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+exec sh -c 'cd .worktrees/r-* && NESS_SESSION=$R ness open --scope c --tier standard --brief ../../../b.md'
+store last-session C
+# The child commits work (its untracked brief with it).
+exec sh -c 'cd .worktrees/c-* && echo work > work.txt && git add -A && git commit -q -m work'
+# A dirty source refuses; the manager's branch is unchanged.
+exec sh -c 'cd .worktrees/c-* && echo dirty > dirty.txt'
+exec sh -c 'cd .worktrees/r-* && git rev-parse HEAD'
+cp stdout ../r-before
+exec sh -c 'cd .worktrees/c-* && NESS_SESSION=$C ness integrate --subject "feat: x" 2>&1; echo "exit $?"'
+stdout 'exit 4'
+stdout 'commit them before ness integrate: \?\? dirty\.txt'
+stdout 'skill ness-[a-z-]+, section [A-Z]'
+exec sh -c 'cd .worktrees/r-* && git rev-parse HEAD'
+cmp stdout ../r-before
+exec sh -c 'cd .worktrees/c-* && rm dirty.txt'
+# A manager worktree with a tracked change refuses before folding.
+exec sh -c 'cd .worktrees/r-* && echo x >> .ness/ness.toml'
+exec sh -c 'cd .worktrees/c-* && NESS_SESSION=$C ness integrate --subject "feat: x"; echo "exit $?"'
+stdout 'exit 4'
+exec sh -c 'cd .worktrees/r-* && git checkout -- .ness/ness.toml'
+# The fold: gate in a temporary worktree, manager's worktree fast-forwarded (its untracked
+# brief is no obstacle), sha recorded.
+exec sh -c 'cd .worktrees/c-* && NESS_SESSION=$C ness integrate --subject "feat: x"'
+stdout '^integrated session/c-[0-9a-f]{12} into session/r-[0-9a-f]{12} at [0-9a-f]{40}$'
+grep 'ness/tmp-s-' $WORK/gate-cwd
+! grep 'worktrees/c-' $WORK/gate-cwd
+exec git worktree list
+! stdout 'ness/tmp-'
+exec sh -c 'cd .worktrees/r-* && test -f work.txt && git status --porcelain --untracked-files=no | wc -l'
+stdout '^0$'
+exec sh -c 'cd .worktrees/r-* && git rev-parse HEAD'
+cp stdout ../r-after
+! cmp ../r-after ../r-before
+store get $C integrated REF
+exec sh -c 'cd .worktrees/r-* && test "$(git rev-parse HEAD)" = "$REF"'
+# Push is off: the remote has only main.
+exec git ls-remote --heads origin
+! stdout 'session/'
+# The root integrates into base (checked out in the primary checkout), push on.
+exec sh -c 'cd .worktrees/r-* && cp ../../../push.toml .ness/ness.toml && git add -A && git commit -q -m push'
+exec sh -c 'cd .worktrees/r-* && NESS_SESSION=$R ness integrate --subject "feat: x"'
+stdout 'into main at'
+exec git rev-parse main
+cp stdout ../main-after
+exec sh -c 'git ls-remote --heads origin main | cut -f1'
+cmp stdout ../main-after
+exists work.txt
+# Nothing else went through the exec table: no gh, no curl.
+fake calls 'gh' 0
+fake calls 'curl' 0
+
+-- b.md --
+b
+-- push.toml --
+ness = "0.1"
+project = "repo"
+base = "main"
+gate = "true"
+[integrate]
+push = true

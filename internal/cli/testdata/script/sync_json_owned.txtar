@@ -1,0 +1,37 @@
+# A user-changed owned key is a conflict for settings.json only; other files still update.
+# covers: R-SYNC-052
+cd repo
+exec ness sync
+exec sed -i 's/"sonnet"/"mine"/' .claude/settings.json
+cp .claude/settings.json ../edited.json
+cp ../x2.md .ness/profiles/local/x.md
+cp ../tier.toml .ness/ness.toml
+exits 3 ness sync
+stdout '^conflict \.claude/settings\.json'
+cmp .claude/settings.json ../edited.json
+exists .claude/settings.json.ness-new
+grep '"CLAUDE_CODE_SUBAGENT_MODEL": ?"haiku"' .claude/settings.json.ness-new
+cmp docs/x.md ../x2.md
+
+-- repo/.ness/ness.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"
+profiles = ["local"]
+-- repo/.ness/profiles/local/profile.toml --
+name = "local"
+[files]
+"docs/x.md" = { own = "x.md" }
+-- repo/.ness/profiles/local/x.md --
+x1
+-- tier.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"
+profiles = ["local"]
+[tiers.economy]
+claude = "haiku/low"
+-- x2.md --
+x2

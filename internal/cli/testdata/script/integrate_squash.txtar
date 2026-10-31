@@ -1,0 +1,59 @@
+# Squash is the default mode: the subject comes from --subject and must be a Conventional Commit
+# subject, refused (exit 4, target unchanged) before folding when missing or malformed; any other
+# mode ignores --subject with a warning and proceeds.
+# covers: R-SESS-140, R-SESS-144
+cd repo
+exec ness init --gate true --base main --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+exec sh -c 'cd .worktrees/r-* && echo a > a.txt && git add -A && git commit -q -m one'
+exec git rev-parse main
+cp stdout ../main-before
+# No subject: refused, naming the form.
+exec sh -c 'cd .worktrees/r-* && NESS_SESSION=$R ness integrate 2>&1; echo "exit $?"'
+stdout 'exit 4'
+stdout 'type\(scope\): summary'
+stdout 'skill ness-[a-z-]+, section [A-Z]'
+exec git rev-parse main
+cmp stdout ../main-before
+# Malformed subjects.
+exec sh -c 'cd .worktrees/r-* && NESS_SESSION=$R ness integrate --subject stuff 2>&1; echo "exit $?"'
+stdout 'exit 4'
+stdout 'type\(scope\): summary'
+exec sh -c 'cd .worktrees/r-* && NESS_SESSION=$R ness integrate --subject "Feat: x" 2>&1; echo "exit $?"'
+stdout 'exit 4'
+exec git rev-parse main
+cmp stdout ../main-before
+# A good subject lands one commit with exactly that subject.
+exec sh -c 'cd .worktrees/r-* && NESS_SESSION=$R ness integrate --subject "feat(cli): x"'
+exec git log -1 --format=%s main
+stdout '^feat\(cli\): x$'
+exec git log -1 --format=%B main
+stdout 'BEGIN_NESTED_COMMIT\none\nEND_NESTED_COMMIT'
+# Another mode ignores --subject with a warning and integrates on its own message.
+cp ../merge.toml .ness/ness.toml
+exec git add -A
+exec git commit -q -m 'merge mode'
+exec git rev-parse main
+cp stdout ../main-2
+exec ness open --root --scope s --tier standard --brief ../b.md
+store last-session S
+exec sh -c 'cd .worktrees/s-* && echo b > b.txt && git add -A && git commit -q -m two'
+exec sh -c 'cd .worktrees/s-* && NESS_SESSION=$S ness integrate --subject "feat(cli): y"'
+stderr '--subject ignored'
+exec git rev-parse main
+! cmp stdout ../main-2
+exec git log -1 --format=%s main
+! stdout 'feat\(cli\): y'
+
+-- b.md --
+b
+-- merge.toml --
+ness = "0.1"
+project = "repo"
+base = "main"
+gate = "true"
+[integrate]
+mode = "merge"

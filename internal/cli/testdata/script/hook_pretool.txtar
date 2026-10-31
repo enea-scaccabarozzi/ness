@@ -1,0 +1,114 @@
+# For a bound session, pre-tool blocks polling and whole-file reads of saved tool results with
+# exit 2 and the reason on stderr, allows everything else silently, and refuses a payload it
+# cannot parse. Unbound, the same payloads pass silently.
+# covers: R-HOOK-011, R-HOOK-012, R-HOOK-013, R-HOOK-014, R-HOOK-017, R-HOOK-002
+cd repo
+exec ness init --gate true --base main --yes
+store add-session s-aaaaaaaaaaaa root
+env NESS_SESSION=s-aaaaaaaaaaaa
+stdin ../monitor.json
+exits 2 ness hook pre-tool
+stderr 'end your turn'
+stderr 'skill ness-[a-z-]+, section [A-Z]'
+! stdout .
+stdin ../schedule.json
+exits 2 ness hook pre-tool
+stderr 'end your turn'
+stdin ../cron.json
+exits 2 ness hook pre-tool
+stderr 'end your turn'
+stdin ../loop_while.json
+exits 2 ness hook pre-tool
+stderr 'end your turn'
+stdin ../loop_until.json
+exits 2 ness hook pre-tool
+stderr 'end your turn'
+stderr 'skill ness-[a-z-]+, section [A-Z]'
+stdin ../loop_for.json
+exits 2 ness hook pre-tool
+stderr 'end your turn'
+stdin ../watch.json
+exits 2 ness hook pre-tool
+stderr 'end your turn'
+stdin ../for_ok.json
+exec ness hook pre-tool
+! stderr .
+stdin ../monitor_ok.json
+exec ness hook pre-tool
+! stdout .
+! stderr .
+stdin ../inbox_once.json
+exec ness hook pre-tool
+! stdout .
+! stderr .
+stdin ../read_whole.json
+exits 2 ness hook pre-tool
+stderr 'offset and limit'
+stderr 'skill ness-[a-z-]+, section [A-Z]'
+stdin ../read_range.json
+exec ness hook pre-tool
+! stderr .
+stdin ../cat.json
+exits 2 ness hook pre-tool
+stderr 'saved tool result'
+stderr 'skill ness-[a-z-]+, section [A-Z]'
+stdin ../sed_range.json
+exec ness hook pre-tool
+! stderr .
+stdin ../edit.json
+exec ness hook pre-tool
+! stdout .
+! stderr .
+stdin ../garbage.txt
+exits 2 ness hook pre-tool
+stderr 'hook payload'
+# Unbound: silent.
+env NESS_SESSION=
+stdin ../monitor.json
+exec ness hook pre-tool
+! stdout .
+! stderr .
+stdin ../garbage.txt
+exec ness hook pre-tool
+! stdout .
+! stderr .
+# The wired command string propagates a block (exit 2, reason on stderr).
+env NESS_SESSION=s-aaaaaaaaaaaa
+exec grep -o 'command -v ness[^"]*pre-tool' .claude/settings.json
+cp stdout ../pre.txt
+stdin ../monitor.json
+exits 2 /bin/sh -c 'sh -c "$(cat ../pre.txt)"'
+stderr 'end your turn'
+
+-- monitor.json --
+{"tool_name":"Monitor","tool_input":{"command":"ness inbox","timeout_sec":300}}
+-- schedule.json --
+{"tool_name":"ScheduleWakeup","tool_input":{"prompt":"run ness status and tell me"}}
+-- cron.json --
+{"tool_name":"CronCreate","tool_input":{"cron":"*/5 * * * *","prompt":"ness inbox"}}
+-- loop_while.json --
+{"tool_name":"Bash","tool_input":{"command":"while true; do ness inbox; sleep 30; done"}}
+-- loop_until.json --
+{"tool_name":"Bash","tool_input":{"command":"until ness status | grep -q closed; do sleep 5; done"}}
+-- loop_for.json --
+{"tool_name":"Bash","tool_input":{"command":"for i in 1 2 3; do ness inbox; sleep 10; done"}}
+-- watch.json --
+{"tool_name":"Bash","tool_input":{"command":"watch -n 5 ness status"}}
+-- for_ok.json --
+{"tool_name":"Bash","tool_input":{"command":"for f in *.md; do wc -l $f; done"}}
+-- monitor_ok.json --
+{"tool_name":"Monitor","tool_input":{"command":"tail -f build.log","timeout_sec":300}}
+-- inbox_once.json --
+{"tool_name":"Bash","tool_input":{"command":"ness inbox"}}
+-- read_whole.json --
+{"tool_name":"Read","tool_input":{"file_path":"/home/u/.claude/projects/-home-u-p/9ed8d0d6/tool-results/b3d68f2ny.txt"}}
+-- read_range.json --
+{"tool_name":"Read","tool_input":{"file_path":"/home/u/.claude/projects/-home-u-p/9ed8d0d6/tool-results/b3d68f2ny.txt","offset":1,"limit":100}}
+-- cat.json --
+{"tool_name":"Bash","tool_input":{"command":"cat /home/u/.claude/projects/-home-u-p/9ed8d0d6/tool-results/b3d68f2ny.txt"}}
+-- sed_range.json --
+{"tool_name":"Bash","tool_input":{"command":"sed -n '1,40p' /home/u/.claude/projects/-home-u-p/9ed8d0d6/tool-results/b3d68f2ny.txt"}}
+-- edit.json --
+{"tool_name":"Edit","tool_input":{"file_path":"main.go","old_string":"a","new_string":"b"}}
+-- garbage.txt --
+{not json

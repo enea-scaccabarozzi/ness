@@ -1,0 +1,99 @@
+# program ships four checks for its children. A fresh seed fails only the autonomy check (exit 4,
+# skill ness-program, section Autonomy, the "## Autonomy" instruction); once the mode and date are
+# recorded the recovery line (seed D1 against ledger D1) passes; a recovery line that differs from
+# the ledger refuses (section Rules); a landed child demands a checkpoint before the next open
+# (section Checkpoints); a child branch that adds decision ids to its record decisions.md is
+# refused at integrate (section Rules) while plain dated notes, or a report only, integrate.
+# covers: R-BLT-110, R-CHK-009, R-CHK-010
+cd repo
+exec ness init --gate true --base main --profile program --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+exec ness open --root --scope r --tier standard --size program --brief ../b.md
+store last-session R
+store sessions 1
+
+# 1. The seed roadmap records no autonomy: only that check refuses, nothing is written.
+exec sh -c 'cd .worktrees/r-* && NESS_SESSION=$R ness open --scope c --tier standard --brief "$WORK/b.md" 2>&1; echo "exit $?"'
+stdout 'exit 4'
+stdout 'ness open refused: .*## Autonomy'
+stdout '\(skill ness-program, section Autonomy\)'
+stdout 'program/autonomy-recorded'
+! stdout 'recovery-line'
+! stdout 'checkpoint-before-wave'
+store sessions 1
+exec git branch --list 'session/c-*'
+! stdout .
+
+# Mode and date recorded: the child opens. Unrelated checks passed on the fresh seed.
+exec sh -c 'cd .worktrees/r-* && sed -i -f "$WORK/fill.sed" docs/program/roadmap.md && git add -A && git commit -q -m autonomy'
+
+# 3. A recovery line that differs from the ledger refuses; the equal one opens.
+exec sh -c 'cd .worktrees/r-* && sed -i -f "$WORK/d12.sed" docs/program/roadmap.md && echo "- **D15** (2026-10-15) later; root; why." >> docs/program/decisions.md'
+exec sh -c 'cd .worktrees/r-* && NESS_SESSION=$R ness open --scope c --tier standard --brief "$WORK/b.md" 2>&1; echo "exit $?"'
+stdout 'exit 4'
+stdout '\(skill ness-program, section Rules\)'
+stdout 'program/recovery-line'
+stdout 'D12'
+stdout 'D15'
+! stdout 'autonomy-recorded'
+store sessions 1
+exec sh -c 'cd .worktrees/r-* && sed -i "s/last decision id D12/last decision id D15/" docs/program/roadmap.md && git add -A && git commit -q -m ledger'
+exec sh -c 'cd .worktrees/r-* && NESS_SESSION=$R ness open --scope c --tier standard --brief "$WORK/b.md"'
+stdout '^opened s-[0-9a-f]{12} scope c '
+store last-session C
+store sessions 2
+
+# 4. Decision ids in the child's record decisions.md are refused, in each of the three forms.
+exec sh -c 'cd .worktrees/c-* && printf "## Lessons\\nNone.\\n" > docs/sessions/r/c/report.md && printf -- "- **D1** (2026-10-15) chose x\\n" > docs/sessions/r/c/decisions.md && git add -A && git commit -q -m ids1'
+exec sh -c 'cd .worktrees/c-* && NESS_SESSION=$C ness integrate --subject "feat: c" 2>&1; echo "exit $?"'
+stdout 'exit 4'
+stdout 'ness integrate refused: '
+stdout '\(skill ness-program, section Rules\)'
+stdout 'program/no-child-decision-ids'
+exec sh -c 'cd .worktrees/c-* && printf -- "C2-D7 chose x\\n" > docs/sessions/r/c/decisions.md && git add -A && git commit -q -m ids2'
+exec sh -c 'cd .worktrees/c-* && NESS_SESSION=$C ness integrate --subject "feat: c" 2>&1; echo "exit $?"'
+stdout 'exit 4'
+stdout 'program/no-child-decision-ids'
+exec sh -c 'cd .worktrees/c-* && printf -- "L0a-D3 chose x\\n" > docs/sessions/r/c/decisions.md && git add -A && git commit -q -m ids3'
+exec sh -c 'cd .worktrees/c-* && NESS_SESSION=$C ness integrate --subject "feat: c" 2>&1; echo "exit $?"'
+stdout 'exit 4'
+stdout 'program/no-child-decision-ids'
+store session $C integrated=
+
+# Plain dated notes without ids integrate (FF-D6).
+exec sh -c 'cd .worktrees/c-* && printf -- "- 2026-10-15 kept the parser, rejected the regex: faster.\\n" > docs/sessions/r/c/decisions.md && git add -A && git commit -q -m notes'
+exec sh -c 'cd .worktrees/c-* && NESS_SESSION=$C ness integrate --subject "feat: c"'
+stdout '^integrated '
+
+# 2. A child landed and closed: the next open is refused until a checkpoint is sent.
+env NESS_SESSION=$R
+exec ness close $C
+exec sh -c 'cd .worktrees/r-* && NESS_SESSION=$R ness open --scope d --tier standard --brief "$WORK/b.md" 2>&1; echo "exit $?"'
+stdout 'exit 4'
+stdout '\(skill ness-program, section Checkpoints\)'
+stdout 'program/checkpoint-before-wave'
+! stdout 'recovery-line'
+store sessions 2
+exec ness send --to operator --intent checkpoint --body @../cp.md
+exec sh -c 'cd .worktrees/r-* && NESS_SESSION=$R ness open --scope d --tier standard --brief "$WORK/b.md"'
+stdout '^opened s-[0-9a-f]{12} scope d '
+store last-session D
+
+# A report only integrates.
+exec sh -c 'cd .worktrees/d-* && printf "## Lessons\\nNone.\\n" > docs/sessions/r/d/report.md && git add -A && git commit -q -m report && NESS_SESSION=$D ness integrate --subject "feat: d"'
+stdout '^integrated '
+
+-- b.md --
+b
+-- cp.md --
+## Done
+c
+## Now
+d
+## Next
+e
+-- fill.sed --
+s/^Mode (gate.*$/&\n\nMode: gate. The operator said "stop at every checkpoint" on 2026-10-15./
+-- d12.sed --
+s/last decision id D[0-9]*/last decision id D12/

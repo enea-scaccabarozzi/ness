@@ -1,0 +1,21 @@
+# One store per repository: a send from a worktree is in the primary checkout's inbox, and the
+# file lives under the git common dir, not under the worktree or its per-worktree git dir.
+# covers: R-MSG-001
+cd repo
+exec ness init --gate true --base main --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+exec git worktree add -q ../wt
+store add-session s-aaaaaaaaaaaa root
+store add-session s-bbbbbbbbbbbb child-b s-aaaaaaaaaaaa
+cd ../wt
+env NESS_SESSION=s-bbbbbbbbbbbb
+exec ness send --to manager --body 'from the worktree'
+cd ../repo
+env NESS_SESSION=s-aaaaaaaaaaaa
+exec ness inbox
+stdout '^m-[a-z2-7]{8}\ts-bbbbbbbbbbbb\trequest\t0m\tfrom the worktree$'
+exists .git/ness/state.sqlite3
+exists .git/worktrees/wt
+! exists .git/worktrees/wt/ness
+! exists ../wt/ness

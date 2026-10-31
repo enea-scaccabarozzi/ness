@@ -1,0 +1,91 @@
+# [contracts] frozen takes globs and uses the session-lock modes against the base branch: a
+# .feature path is scenario-locked (additions free, an edited or removed base scenario fails), a
+# .md path matching [contracts] prefix is an append-only prefix, anything else whole-file; a file
+# new on the branch under a glob fails check as added, yet the hook lets it be created; the hook
+# warns on the first two and refuses the third. A
+# malformed (JSON) contract.lock identical at the merge-base is skipped with a warning; one the
+# branch adds or modifies still fails closed; removing it is fine.
+# covers: R-CTR-040, R-CTR-041, R-CTR-042, R-CTR-043, R-CTR-044, R-CTR-055
+cd repo
+exec ness init --gate true --base main --yes
+exec sh -c 'printf "features = [\"contracts\"]\n[contracts]\nfrozen = [\"features/*.feature\", \"experiments/*/spec.md\", \"steps.go\"]\nprefix = [\"experiments/*/spec.md\"]\n" >> .ness/ness.toml'
+exec sh -c 'mkdir -p features experiments/one docs/sessions/old && cp ../pay.feature features/pay.feature && cp ../spec.md experiments/one/spec.md && printf "step\n" > steps.go'
+exec sh -c 'printf "{\"files\":{\"a.txt\":\"abc\"}}\n" > docs/sessions/old/contract.lock'
+exec git add -A
+exec git commit -q -m 'ness init'
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+env NESS_SESSION=$R
+# Clean: three project-wide paths (the glob found pay.feature and spec.md), and the legacy lock is
+# skipped with a one-line warning naming it.
+exec sh -c 'cd .worktrees/r-* && ness contract check'
+stdout '^ok\t3 frozen files$'
+stderr 'warning: docs/sessions/old/contract\.lock does not parse'
+# Feature: an added scenario passes; a file new on the branch under the glob fails as added; an
+# edited base scenario fails.
+exec sh -c 'cd .worktrees/r-* && printf "\n  Scenario: extra\n    Given more\n" >> features/pay.feature && ness contract check'
+stdout '^ok\t3 frozen files$'
+exec sh -c 'cd .worktrees/r-* && cp ../../../new.feature features/new.feature'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stdout '^added\tfeatures/new\.feature\t\.ness/ness\.toml \(new under frozen glob features/\*\.feature\)$'
+exec sh -c 'cd .worktrees/r-* && sed -i "s/Then it works/Then it fails/" features/pay.feature'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stdout '^differs\tfeatures/pay\.feature\t\.ness/ness\.toml\tscenario "pays" edited$'
+exec sh -c 'cd .worktrees/r-* && git checkout -- features/pay.feature && rm features/new.feature'
+# Prefix .md: appended amendment passes, an edited word fails.
+exec sh -c 'cd .worktrees/r-* && printf "\n## Amendment 2026-10-21\n\nMore.\n" >> experiments/one/spec.md && ness contract check'
+exec sh -c 'cd .worktrees/r-* && git checkout -- experiments/one/spec.md && sed -i "s/100/200/" experiments/one/spec.md'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stdout '^differs\texperiments/one/spec\.md\t\.ness/ness\.toml\t'
+exec sh -c 'cd .worktrees/r-* && git checkout -- experiments/one/spec.md'
+# Anything else stays whole-file.
+exec sh -c 'cd .worktrees/r-* && printf "more\n" >> steps.go'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stdout '^differs\tsteps\.go\t\.ness/ness\.toml$'
+exec sh -c 'cd .worktrees/r-* && git checkout -- steps.go'
+# The hook: warn on the scenario and prefix paths, refuse the whole-file one.
+stdin ../edit-feature.json
+exec sh -c 'cd .worktrees/r-* && ness hook pre-tool'
+stdout 'features/pay\.feature is locked project-wide'
+stdin ../edit-spec.json
+exec sh -c 'cd .worktrees/r-* && ness hook pre-tool'
+stdout 'experiments/one/spec\.md is locked project-wide'
+stdin ../edit-steps.json
+exits 2 sh -c 'cd .worktrees/r-* && ness hook pre-tool'
+stderr 'steps\.go is frozen project-wide'
+stdin ../edit-new.json
+exec sh -c 'cd .worktrees/r-* && ness hook pre-tool'
+! stdout .
+# A legacy lock the branch modifies, or adds, fails closed; removing it passes.
+exec sh -c 'cd .worktrees/r-* && printf "x\n" >> docs/sessions/old/contract.lock'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stderr 'malformed contract\.lock'
+exec sh -c 'cd .worktrees/r-* && git checkout -- docs/sessions/old/contract.lock && mkdir -p docs/sessions/new && printf "{}\n" > docs/sessions/new/contract.lock'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stderr 'docs/sessions/new/contract\.lock: malformed contract\.lock'
+exec sh -c 'cd .worktrees/r-* && rm -r docs/sessions/new && git rm -q docs/sessions/old/contract.lock && git commit -q -m "drop legacy lock" && ness contract check'
+stdout '^ok\t3 frozen files$'
+-- b.md --
+brief
+-- pay.feature --
+Feature: pay
+  Scenario: pays
+    When they pay
+    Then it works
+-- new.feature --
+Feature: new
+  Scenario: fresh
+    Given x
+-- spec.md --
+# Spec
+
+- Hypothesis: X beats Y.
+- Stop after 100 runs.
+-- edit-feature.json --
+{"tool_name":"Edit","tool_input":{"file_path":"features/pay.feature"}}
+-- edit-spec.json --
+{"tool_name":"Edit","tool_input":{"file_path":"experiments/one/spec.md"}}
+-- edit-steps.json --
+{"tool_name":"Edit","tool_input":{"file_path":"steps.go"}}
+-- edit-new.json --
+{"tool_name":"Write","tool_input":{"file_path":"features/new.feature"}}

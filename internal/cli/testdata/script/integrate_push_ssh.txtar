@@ -1,0 +1,52 @@
+# The push carries the ssh keepalive pair only when nothing else picks the ssh command: a set
+# GIT_SSH_COMMAND or GIT_SSH (a deploy-key wrapper) is the project's own, and core.sshCommand
+# would beat GIT_SSH. A git wrapper on PATH logs every git argv ness runs.
+# covers: R-SESS-166
+cd repo
+mkdir ../bin
+cp ../git-wrapper ../bin/git
+chmod 755 ../bin/git
+env REALPATH=$PATH
+env GITLOG=$WORK/gitlog
+env PATH=$WORK/bin:$PATH
+exec ness init --gate true --base main --yes
+cp ../push.toml .ness/ness.toml
+exec git add -A
+exec git commit -q -m 'ness init'
+exec git init -q --bare -b main ../origin.git
+exec git remote add origin ../origin.git
+exec git push -q origin main
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+# Nothing set: the keepalive pair.
+exec sh -c 'cd .worktrees/r-* && echo 1 > a.txt && git add -A && git commit -q -m one && : > $GITLOG && NESS_SESSION=$R ness integrate --subject "feat: one"'
+exec grep 'push origin main$' $WORK/gitlog
+stdout '^-c core\.sshCommand=ssh -o ServerAliveInterval=30'
+# GIT_SSH_COMMAND set: no pair.
+exec sh -c 'cd .worktrees/r-* && echo 2 > a.txt && git commit -q -am two && : > $GITLOG && GIT_SSH_COMMAND=ssh NESS_SESSION=$R ness integrate --subject "feat: two"'
+exec grep 'push origin main$' $WORK/gitlog
+! stdout 'core\.sshCommand'
+stdout 'push origin main'
+# GIT_SSH set: no pair.
+exec sh -c 'cd .worktrees/r-* && echo 3 > a.txt && git commit -q -am three && : > $GITLOG && GIT_SSH=ssh NESS_SESSION=$R ness integrate --subject "feat: three"'
+exec grep 'push origin main$' $WORK/gitlog
+! stdout 'core\.sshCommand'
+stdout 'push origin main'
+exec git -C ../origin.git rev-parse main
+cp stdout ../origin-main
+exec git rev-parse main
+cmp stdout ../origin-main
+
+-- git-wrapper --
+#!/bin/sh
+printf '%s\n' "$*" >> "$GITLOG"
+PATH=$REALPATH exec git "$@"
+-- b.md --
+b
+-- push.toml --
+ness = "0.1"
+project = "repo"
+base = "main"
+gate = "true"
+[integrate]
+push = true

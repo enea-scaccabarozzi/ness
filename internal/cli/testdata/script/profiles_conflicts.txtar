@@ -1,0 +1,75 @@
+# Profile conflicts are refused, all named, before any file is written.
+# covers: R-PROF-031, R-PROF-032, R-PROF-033, R-PROF-035, R-PROF-036, R-PROF-037, R-PROF-040, R-PROF-044, R-PROF-006
+cd repo
+snap before
+exits 4 ness sync
+stderr 'profiles a, b all set single slot ness-entry#x'
+stderr 'profiles a and b set seam integrator differently'
+stderr 'profiles a and b set integrate.push differently'
+stderr 'profiles a and b both own docs/z.md'
+stderr 'profiles c and a conflict'
+stderr 'profile c requires profile missing'
+samesnap before
+cp ../mismatch.toml .ness/ness.toml
+snap before
+exits 4 ness sync
+stderr 'name "f" differs from its directory "e"'
+samesnap before
+cp ../missingfile.toml .ness/ness.toml
+snap before
+exits 4 ness sync
+stderr 'profile g: .*nope\.md, which is missing'
+samesnap before
+
+-- repo/.ness/ness.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"
+profiles = ["a", "b", "c"]
+-- mismatch.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"
+profiles = ["e"]
+-- missingfile.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"
+profiles = ["g"]
+-- repo/.ness/profiles/a/profile.toml --
+name = "a"
+[slots]
+"ness-entry#x" = { set = "t.md" }
+[files]
+"docs/z.md" = { own = "t.md" }
+[config]
+"integrate.push" = true
+[atoms]
+integrator = "squash"
+-- repo/.ness/profiles/a/t.md --
+a
+-- repo/.ness/profiles/b/profile.toml --
+name = "b"
+[slots]
+"ness-entry#x" = { set = "t.md" }
+[files]
+"docs/z.md" = { own = "t.md" }
+[config]
+"integrate.push" = false
+[atoms]
+integrator = "pr"
+-- repo/.ness/profiles/b/t.md --
+b
+-- repo/.ness/profiles/c/profile.toml --
+name = "c"
+conflicts = ["a"]
+requires = ["missing"]
+-- repo/.ness/profiles/e/profile.toml --
+name = "f"
+-- repo/.ness/profiles/g/profile.toml --
+name = "g"
+[files]
+"docs/g.md" = { own = "nope.md" }

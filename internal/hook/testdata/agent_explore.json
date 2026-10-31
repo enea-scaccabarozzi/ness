@@ -1,0 +1,1 @@
+{"session_id":"9ed8d0d6","cwd":"/home/u/p","hook_event_name":"PreToolUse","tool_name":"Agent","tool_input":{"description":"Find the retry logic","prompt":"Search the repository for where requests are retried and report the files.","subagent_type":"Explore"},"tool_use_id":"toolu_01"}

@@ -1,0 +1,67 @@
+# A project-wide path, or a file added under a frozen glob, whose content is the one at a tip of
+# the base branch passes check: the local base or origin/<base>. A branch that merged base and was
+# then squash-folded onto the old fork point (its link to base lost) does not report base's own
+# approved edits, nor a frozen file base deleted. The same file changed otherwise still fails, and
+# without the tip that holds the text the edits are reported again. A tip behind what the branch
+# knows passes nothing: origin behind the local base, and a tag named like the base.
+# covers: R-CTR-057
+cd repo
+exec ness init --gate true --base main --yes
+exec sh -c 'printf "features = [\"contracts\"]\n[contracts]\nfrozen = [\"features/*.feature\", \"steps.go\", \"legacy.go\"]\n" >> .ness/ness.toml'
+exec sh -c 'mkdir -p features && cp ../pay.feature features/pay.feature && printf "step\n" > steps.go && printf "old\n" > legacy.go'
+exec git add -A
+exec git commit -q -m 'ness init'
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+env NESS_SESSION=$R
+exec sh -c 'cd .worktrees/r-* && git tag fork'
+# Base moves on after the fork: a whole-file edit, a scenario edit, a new feature, a deletion.
+exec sh -c 'printf "step v2\n" > steps.go && sed -i "s/Then it works/Then it still works/" features/pay.feature && cp ../new.feature features/base.feature && git rm -q legacy.go && git add -A && git commit -q -m "base moves on" && git tag moved'
+# The branch merges base, then is squash-folded onto the fork point: one parent, base's text.
+exec sh -c 'cd .worktrees/r-* && echo x > other.txt && git add -A && git commit -q -m own && git merge -q --no-edit main && git reset -q --soft fork && git commit -q -m squash'
+exec sh -c 'cd .worktrees/r-* && test "$(git merge-base main HEAD)" = "$(git rev-parse fork)" && ness contract check'
+stdout '^ok\t'
+# The same file changed otherwise on the branch still fails.
+exec sh -c 'cd .worktrees/r-* && printf "step v3\n" > steps.go'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stdout '^differs\tsteps\.go\t'
+! stdout 'pay\.feature|base\.feature|legacy\.go'
+exec sh -c 'cd .worktrees/r-* && git checkout -- steps.go'
+# Only origin/main holds the new text (the local main is stale): it passes.
+exec sh -c 'git update-ref refs/remotes/origin/main main && git update-ref refs/heads/main fork'
+exec sh -c 'cd .worktrees/r-* && ness contract check'
+stdout '^ok\t'
+# Without that tip, base's edits are the branch's again.
+exec git update-ref -d refs/remotes/origin/main
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stdout '^differs\tsteps\.go\t'
+stdout '^differs\tfeatures/pay\.feature\t'
+stdout '^differs\tlegacy\.go\t'
+stdout '^added\tfeatures/base\.feature\t'
+# Origin behind the local base: a branch forked after base moved on that restores origin's older
+# text fails, and so does deleting a frozen file only the local base added.
+exec sh -c 'git checkout -q -f -B main moved && printf "old\n" > legacy.go && git add legacy.go && git commit -q -m "legacy back"'
+exec git update-ref refs/remotes/origin/main fork
+exec sh -c 'cd .worktrees/r-* && git reset -q --hard main && git checkout origin/main -- steps.go'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stdout '^differs\tsteps\.go\t'
+exec sh -c 'cd .worktrees/r-* && git checkout -q HEAD -- steps.go && git rm -q features/base.feature'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stdout '^differs\tfeatures/base\.feature\t'
+! stdout 'steps\.go'
+# A tag named like the base shadows nothing: a tag main on a side commit holding the edit fails.
+exec sh -c 'cd .worktrees/r-* && git checkout -q HEAD -- . && printf "step v3\n" > steps.go && git add steps.go && git tag main $(git commit-tree -p HEAD -m side $(git write-tree))'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stdout '^differs\tsteps\.go\t'
+exec git tag -d main
+-- b.md --
+brief
+-- pay.feature --
+Feature: pay
+  Scenario: pays
+    When they pay
+    Then it works
+-- new.feature --
+Feature: base
+  Scenario: fresh
+    Given x

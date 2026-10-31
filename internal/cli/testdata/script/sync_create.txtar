@@ -1,0 +1,31 @@
+# A first sync creates and records the core targets; repeating it changes nothing, and so does
+# re-rendering from scratch.
+# covers: R-SYNC-010, R-SYNC-002, R-SYNC-062, R-SYNC-065, R-SYNC-069, R-SYNC-030
+cd repo
+exec ness sync
+stdout '^create AGENTS.md#core/router$'
+stdout '^create CLAUDE.md$'
+exists .agents/skills/ness-entry/SKILL.md
+exists .claude/agents/ness-sweep.md
+islink CLAUDE.md AGENTS.md
+islink .claude/skills ../.agents/skills
+grep '"autoCompactWindow": 265000' .claude/settings.json
+grep 'command -v ness >/dev/null \|\| exit 0; ness hook session-start' .claude/settings.json
+exec git check-ignore -q .worktrees/x
+exec git check-ignore -q foo.ness-new
+grep '"schema": 1' .ness/lock.json
+exec ness sync --check
+! stdout .
+snap first
+exec ness sync
+! stdout .
+samesnap first
+rm AGENTS.md CLAUDE.md .claude .agents .gitignore .ness/lock.json
+exec ness sync
+samesnap first
+
+-- repo/.ness/ness.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"

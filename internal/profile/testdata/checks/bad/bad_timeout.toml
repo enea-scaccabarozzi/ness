@@ -1,0 +1,10 @@
+# want: timeout
+name = "local"
+
+[[checks]]
+id = "c1"
+on = "open"
+skill = "ness-entry"
+section = "Communicate"
+run = "true"
+timeout = "soon"

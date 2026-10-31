@@ -1,0 +1,47 @@
+# On a terminal without --yes, init prompts for each value a flag did not give, shows the
+# inferred default in brackets, takes an empty answer as the default, refuses an empty gate
+# and prompts for nothing with --yes.
+# covers: R-CFG-051
+cd repo
+env NESS_TEST_TTY=1
+stdin ../empty.txt
+exits 4 ness init
+stderr 'missing --gate'
+! exists .ness
+stdin ../answers.txt
+exec ness init
+stdout 'project \[repo\]: '
+stdout 'base \[main\]: '
+stdout 'gate: '
+stdout 'client \[claude\]: '
+grep '^project = "repo"$' .ness/ness.toml
+grep '^base = "main"$' .ness/ness.toml
+grep '^gate = "make check"$' .ness/ness.toml
+! grep '^client' .ness/ness.toml
+rm -r .ness AGENTS.md CLAUDE.md .claude .agents .gitignore
+stdin ../answers.txt
+exec ness init --gate true --project p
+! stdout 'gate: '
+! stdout 'project \['
+stdout 'base \[main\]: '
+grep '^gate = "true"$' .ness/ness.toml
+grep '^project = "p"$' .ness/ness.toml
+rm -r .ness AGENTS.md CLAUDE.md .claude .agents .gitignore
+exec ness init --gate true --yes
+! stdout '\]: '
+rm -r .ness AGENTS.md CLAUDE.md .claude .agents .gitignore
+env NESS_TEST_TTY=
+stdin ../answers.txt
+exits 4 ness init
+stderr 'missing --gate'
+
+-- empty.txt --
+
+
+
+
+-- answers.txt --
+
+
+make check
+

@@ -1,0 +1,39 @@
+# In a ness project, session-start for a conversation that is not a ness session prints the
+# unbound note and touches no row; outside a ness project, and for pre-tool, it stays silent.
+# covers: R-HOOK-019, R-HOOK-002
+exec git init -q -b main plain
+cd plain
+stdin ../startup.json
+exec ness hook session-start
+! stdout .
+! stderr .
+cd ../repo
+exec ness init --gate true --base main --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+stdin ../startup.json
+exec ness hook session-start
+cmp stdout ../note.txt
+! stderr .
+env CLAUDE_CODE_SESSION_ID=0bad0bad-0000-4000-8000-000000000001
+stdin ../startup.json
+exec ness hook session-start
+cmp stdout ../note.txt
+stdin ../pretool.json
+exec ness hook pre-tool
+! stdout .
+! stderr .
+exec ness status --json
+! stdout '"id"'
+
+-- startup.json --
+{"hook_event_name":"SessionStart","source":"startup","session_id":"0bad0bad-0000-4000-8000-000000000001"}
+-- pretool.json --
+{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"sleep 30; ness inbox"}}
+-- note.txt --
+ness: this conversation is not a ness session yet.
+Answer questions here directly. Work that needs a branch (a quick task or a full session) runs
+as a session: load the ness-entry skill and promote this conversation with
+ness open --root --here --scope NAME --tier TIER --size quick|full --brief FILE
+quick: one deliverable, no children, one sitting; full: anything else. You can change it later
+with ness size. Propose it in one line first, unless the operator already asked you to start the work.

@@ -1,0 +1,9 @@
+# want: id
+name = "local"
+
+[[checks]]
+on = "open"
+skill = "ness-entry"
+section = "Communicate"
+message = "fix it"
+kind = "checkpoint-since-landing"

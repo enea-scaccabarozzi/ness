@@ -1,0 +1,36 @@
+# With the pr integrator, local commits after the PR was merged are not integrated: close refuses
+# and keeps everything; --discard is the explicit way out and keeps the branch.
+# covers: R-SESS-071, R-SESS-072
+cd repo
+exec ness init --gate true --base main --yes
+cp ../pr.toml .ness/ness.toml
+exec git add -A
+exec git commit -q -m 'ness init'
+exec git init -q --bare ../remote
+exec git remote add origin ../remote
+exec git push -q origin main
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+exec sh -c 'cd .worktrees/r-* && printf "## Lessons\nNone.\n" > docs/sessions/r/report.md && git add -A && git commit -q -m r && NESS_SESSION=$R ness integrate'
+fake forge last PR
+fake forge merge $PR
+exec sh -c 'cd .worktrees/r-* && echo late > late.txt && git add -A && git commit -q -m late'
+exits 4 ness close $R
+stderr 'not integrated into main'
+exec git worktree list
+stdout 'worktrees/r-'
+fake herdr tabs 1
+exec ness close $R --discard
+store session $R closed=true
+exec git branch --list 'session/r-*'
+stdout 'session/r-'
+
+-- b.md --
+b
+-- pr.toml --
+ness = "0.1"
+project = "repo"
+base = "main"
+gate = "true"
+[integrate]
+mode = "pr"

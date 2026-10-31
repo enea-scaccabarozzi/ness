@@ -1,0 +1,103 @@
+# ness send --intent checkpoint: a root's progress report to the operator. The body needs the
+# Done, Now and Next headings (a refusal names only the missing ones and creates nothing); --page
+# appends one Page line, and refuses --page beside a body that has one; an Ask section keeps the item open for the
+# operator after it was read, like a decision, while a plain checkpoint leaves like an fyi; only a
+# root sends one, only to the operator; the same content again is the same item.
+# covers: R-MSG-010, R-MSG-014, R-MSG-040, R-MSG-041, R-MSG-065, R-MSG-066
+cd repo
+exec ness init --gate true --base main --yes
+store add-session s-aaaaaaaaaaaa root
+store add-session s-bbbbbbbbbbbb child-b s-aaaaaaaaaaaa
+env NESS_SESSION=s-aaaaaaaaaaaa
+# A plain checkpoint with --page: one item, the page line last, a repeat is the same item.
+exec ness send --to operator --intent checkpoint --body @../cp.md --page https://example.test/p
+stdout '^sent m-[a-z2-7]{8} to operator$'
+! stdout 'Done'
+store last operator CP
+store items operator 1
+exec ness send --to operator --intent checkpoint --body @../cp.md --page https://example.test/p
+stdout '^already sent m-[a-z2-7]{8}$'
+store items operator 1
+env NESS_SESSION=
+exec ness inbox --show $CP
+stdout '## Done'
+stdout '^Page: https://example.test/p$'
+stdout -count=1 'Page:'
+# No Ask section: read once, the operator's list is empty again.
+store items operator 0
+# A body with a Page line of its own and --page is a usage error naming both; nothing is created.
+env NESS_SESSION=s-aaaaaaaaaaaa
+exits 2 ness send --to operator --intent checkpoint --body @../cp-page.md --page https://other.test/q
+stderr '--page'
+stderr 'Page:'
+store items operator 0
+# The body alone, with its own Page line, is sent as written.
+exec ness send --to operator --intent checkpoint --body @../cp-page.md
+store last operator CPP
+env NESS_SESSION=
+exec ness inbox --show $CPP
+stdout -count=1 'Page:'
+stdout '^Page: https://body.test/x$'
+# With an Ask section the item is an obligation: still listed after it was read.
+env NESS_SESSION=s-aaaaaaaaaaaa
+exec ness send --to operator --intent checkpoint --body @../cp-ask.md
+store last operator ASK
+env NESS_SESSION=
+exec ness inbox --show $ASK
+stdout '## Ask'
+store items operator 1
+exec ness inbox
+stdout -count=1 '^m-[a-z2-7]{8}\ts-aaaaaaaaaaaa\tcheckpoint\t'
+# A body without a heading is refused, naming only what is missing; nothing is created.
+env NESS_SESSION=s-aaaaaaaaaaaa
+exits 2 ness send --to operator --intent checkpoint --body @../cp-nonext.md
+stderr 'Next'
+stderr 'skill ness-[a-z-]+, section [A-Z]'
+! stderr 'Done'
+! stderr 'Now'
+exits 2 ness send --to operator --intent checkpoint --body 'just words'
+stderr 'Done'
+stderr 'skill ness-[a-z-]+, section [A-Z]'
+stderr 'Now'
+stderr 'Next'
+# --page belongs to a checkpoint alone.
+exits 2 ness send --to operator --intent fyi --body x --page https://example.test/p
+exits 2 ness send --to operator --body x --page https://example.test/p
+# Only a root sends one, and only to the operator.
+exits 4 ness send --to s-bbbbbbbbbbbb --intent checkpoint --body @../cp.md
+env NESS_SESSION=s-bbbbbbbbbbbb
+exits 4 ness send --to manager --intent checkpoint --body @../cp.md
+exits 4 ness send --to operator --intent checkpoint --body @../cp.md
+store items s-aaaaaaaaaaaa 0
+store items s-bbbbbbbbbbbb 0
+store items operator 1
+
+-- cp.md --
+## Done
+the band study
+## Now
+scoring
+## Next
+rung two
+-- cp-page.md --
+## Done
+a
+## Now
+b
+## Next
+c
+Page: https://body.test/x
+-- cp-ask.md --
+## Done
+a
+## Now
+b
+## Next
+c
+## Ask
+Ship it?
+-- cp-nonext.md --
+## Done
+a
+## Now
+b

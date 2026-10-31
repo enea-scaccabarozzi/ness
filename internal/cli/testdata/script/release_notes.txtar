@@ -1,0 +1,54 @@
+# sync prints the notes of every version after the lock's and up to the binary's, oldest
+# first, with their Running sessions subsection; a second sync prints none; a fresh init
+# prints none.
+# covers: R-SYNC-032, R-SYNC-033
+cd repo
+env NESS_TEST_NOTES=$WORK/notes.md
+env NESS_TEST_VERSION=0.3.0
+exec ness init --gate true --base main --yes
+! stdout 'release notes'
+grep '"ness": "0.3.0"' .ness/lock.json
+env NESS_TEST_VERSION=0.3.2
+exec ness sync
+cp stdout ../out.txt
+stdout 'ness 0.3.1 release notes'
+stdout 'ness 0.3.2 release notes'
+! stdout '0\.3\.0 release notes'
+stdout '### Running sessions'
+stdout 'resume each root after sync'
+exec sh -c 'grep -n "release notes" ../out.txt | head -1'
+stdout '0\.3\.1'
+grep '"ness": "0.3.2"' .ness/lock.json
+exec ness sync
+! stdout .
+exec ness sync --check
+! stdout .
+
+-- notes.md --
+# Changelog
+
+## [0.3.2](https://example.com/compare/v0.3.1...v0.3.2) (2026-10-20)
+
+### Features
+
+* stats
+
+### Running sessions
+
+* nothing to do
+
+## [0.3.1](https://example.com/compare/v0.3.0...v0.3.1) (2026-10-15)
+
+### Bug Fixes
+
+* a fix
+
+### Running sessions
+
+* resume each root after sync
+
+## [0.3.0] (2026-10-10)
+
+### Running sessions
+
+* first

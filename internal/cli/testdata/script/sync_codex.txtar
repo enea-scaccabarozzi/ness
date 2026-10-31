@@ -1,0 +1,47 @@
+# With client = "codex" sync owns the compaction limit and the [agents] subagent defaults in
+# .codex/config.toml at the key level, recorded in the lock, keeping the user's other keys;
+# the economy tier's codex row drives the defaults. Key names are Codex 0.157's.
+# covers: R-SYNC-068, R-SYNC-086, R-MOD-050
+cd repo
+exec ness init --gate true --base main --yes
+cp ../ness.toml .ness/ness.toml
+exec ness sync
+stdout 'create \.codex/config\.toml:model_auto_compact_token_limit'
+stdout 'adopt \.codex/config\.toml:agents\.default_subagent_model$'
+grep 'model_auto_compact_token_limit = 235000' .codex/config.toml
+grep '^\[agents\]' .codex/config.toml
+grep 'default_subagent_model = "gpt-6-luna"' .codex/config.toml
+grep 'default_subagent_reasoning_effort = "medium"' .codex/config.toml
+grep '^# keep me' .codex/config.toml
+grep 'sandbox_mode = "workspace-write"' .codex/config.toml
+! grep '\[agents\.' .codex/config.toml
+grep -count=3 '"id": "\.codex/config\.toml:' .ness/lock.json
+exec ness sync --check
+# Changing the economy row follows into the file.
+cp ../ness-terra.toml .ness/ness.toml
+exec ness sync
+grep 'default_subagent_model = "gpt-5.6-terra"' .codex/config.toml
+grep 'default_subagent_reasoning_effort = "medium"' .codex/config.toml
+
+-- ness.toml --
+ness = "0.1"
+project = "repo"
+base = "main"
+gate = "true"
+client = "codex"
+experimental = ["codex"]
+-- ness-terra.toml --
+ness = "0.1"
+project = "repo"
+base = "main"
+gate = "true"
+client = "codex"
+experimental = ["codex"]
+[tiers.economy]
+codex = "gpt-5.6-terra/medium"
+-- repo/.codex/config.toml --
+# keep me
+sandbox_mode = "workspace-write"
+
+[agents]
+default_subagent_model = "gpt-6-luna"

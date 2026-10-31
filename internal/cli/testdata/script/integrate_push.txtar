@@ -1,0 +1,33 @@
+# When the target moved and the push then fails, the integration is still recorded (the target
+# is ahead), the exit is 1, and a retry finds nothing to integrate.
+# covers: R-SESS-098, R-SESS-099
+cd repo
+exec ness init --gate true --base main --yes
+cp ../push.toml .ness/ness.toml
+exec git add -A
+exec git commit -q -m 'ness init'
+exec git remote add origin ../no-such-remote
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+exec sh -c 'cd .worktrees/r-* && echo a > a.txt && git add -A && git commit -q -m a'
+exec sh -c 'cd .worktrees/r-* && NESS_SESSION=$R ness integrate --subject "feat: x" 2>&1; echo "exit $?"'
+stdout 'main moved to [0-9a-f]{40} but the push failed'
+stdout 'exit 1'
+exec git rev-parse main
+cp stdout ../main-after
+exec git rev-parse session/r-*
+store get $R integrated REF
+exec sh -c 'test "$REF" = "$(cat ../main-after)"'
+exec sh -c 'cd .worktrees/r-* && NESS_SESSION=$R ness integrate --subject "feat: x" 2>&1; echo "exit $?"'
+stdout 'nothing to integrate'
+stdout 'exit 4'
+
+-- b.md --
+b
+-- push.toml --
+ness = "0.1"
+project = "repo"
+base = "main"
+gate = "true"
+[integrate]
+push = true

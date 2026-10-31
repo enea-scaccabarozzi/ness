@@ -1,0 +1,1 @@
+- **program** (size `program`): a root that owns a map (`docs/program/roadmap.md`), opens children in waves and releases; load the `ness-program` skill.

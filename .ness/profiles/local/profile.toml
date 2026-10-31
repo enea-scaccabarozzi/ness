@@ -1,0 +1,7 @@
+name = "local"
+summary = "ness's own go-strict values"
+
+[slots]
+".golangci.yml#module-path"          = { set = "module-path.md" }
+".golangci.yml#go-version"           = { set = "go-version.md" }
+".ness/audit.toml#composition-roots" = { set = "composition-roots.md" }

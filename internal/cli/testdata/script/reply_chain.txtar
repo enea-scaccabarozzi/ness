@@ -1,0 +1,27 @@
+# A reply lands in the asker's inbox; the asker may settle it with ness reply, which delivers
+# nothing back, so two sessions can never bounce replies. To go on, it sends a new item.
+# covers: R-MSG-050
+cd repo
+exec ness init --gate true --base main --yes
+store add-session s-aaaaaaaaaaaa root
+store add-session s-bbbbbbbbbbbb child s-aaaaaaaaaaaa
+env NESS_SESSION=s-bbbbbbbbbbbb
+exec ness send --to manager --body 'may I?'
+store last s-aaaaaaaaaaaa REQ
+env NESS_SESSION=s-aaaaaaaaaaaa
+exec ness reply $REQ --body 'yes' --as accepted
+env NESS_SESSION=s-bbbbbbbbbbbb
+store items s-bbbbbbbbbbbb 1
+store last s-bbbbbbbbbbbb REP
+store item $REP intent=reply
+env NESS_SESSION=s-aaaaaaaaaaaa
+exits 4 ness reply $REP --body 'mine'
+stderr 'not to you'
+env NESS_SESSION=s-bbbbbbbbbbbb
+exec ness reply $REP --body 'thanks'
+stdout 'settled reply'
+store item $REP disposition=resolved
+store items s-bbbbbbbbbbbb 0
+store items s-aaaaaaaaaaaa 0
+exec ness inbox --show $REP
+stdout '^yes$'

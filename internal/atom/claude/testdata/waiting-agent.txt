@@ -1,0 +1,8 @@
+  ◯ general-purpose  Checking the figures                                        5m 2s · ↓ 228.4k tokens
+✻ Waiting for 1 background agent to finish
+  ● main
+  ◯ general-purpose  Generating the tables
+────────────────────────────────────────────────────────────────────────────────
+❯
+────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ bypass permissions on (shift+tab to cycle)

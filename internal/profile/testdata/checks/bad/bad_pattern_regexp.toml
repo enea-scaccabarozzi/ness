@@ -1,0 +1,12 @@
+# want: pattern
+name = "local"
+
+[[checks]]
+id = "c1"
+on = "open"
+skill = "ness-entry"
+section = "Communicate"
+message = "fix it"
+kind = "branch-forbids"
+path = "^docs/"
+pattern = "(unclosed"

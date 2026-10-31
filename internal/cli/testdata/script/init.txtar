@@ -1,0 +1,33 @@
+# init refuses what it cannot decide, then writes ness.toml and syncs; a second init is refused.
+# covers: R-CFG-020, R-CFG-021, R-CFG-023, R-CFG-024, R-CFG-025, R-CFG-050, R-CFG-052, R-CFG-010
+cd repo
+exec git checkout -q --detach
+exits 4 ness init --gate 'make validate' --yes
+stderr '--base'
+exec git checkout -q main
+exits 4 ness init --gate 'make validate' --profile nope --yes
+stderr 'unknown profile "nope"'
+! exists .ness
+exits 4 ness init --yes
+stderr '--gate'
+! exists .ness
+env NESS_TEST_VERSION=dev
+exits 4 ness init --gate 'make validate' --yes
+stderr 'binary version "dev"'
+! exists .ness
+env NESS_TEST_VERSION=
+exec ness init --gate 'make validate' --client claude --yes
+cmp .ness/ness.toml ../want.toml
+exists .ness/lock.json
+exists AGENTS.md
+exec ness sync --check
+exits 4 ness init --gate x --yes
+stderr 'already exists'
+cmp .ness/ness.toml ../want.toml
+
+-- want.toml --
+ness = "0.1"
+project = "repo"
+base = "main"
+gate = "make validate"
+client = "claude"

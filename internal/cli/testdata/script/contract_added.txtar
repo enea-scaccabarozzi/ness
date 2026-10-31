@@ -1,0 +1,51 @@
+# A file new on the branch under a [contracts] frozen glob fails check, untracked or committed; a
+# new file outside every glob does not. The guard still lets the file be created; an amend
+# authorized by the operator's words for the added path makes check pass.
+# covers: R-CTR-055, R-CTR-056
+cd repo
+exec ness init --gate true --base main --yes
+exec sh -c 'printf "features = [\"contracts\"]\n[contracts]\nfrozen = [\"features/*.feature\"]\n" >> .ness/ness.toml'
+exec sh -c 'mkdir -p features && cp ../pay.feature features/pay.feature'
+exec git add -A
+exec git commit -q -m 'ness init'
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+store get $R client_session CS
+env NESS_SESSION=$R
+exec sh -c 'cd .worktrees/r-* && echo x > notes.txt && ness contract check'
+stdout '^ok\t1 frozen files$'
+# The guard allows the creation.
+stdin ../write-new.json
+exec sh -c 'cd .worktrees/r-* && ness hook pre-tool'
+! stdout .
+# Untracked, then committed: both reported.
+exec sh -c 'cd .worktrees/r-* && cp ../../../new.feature features/new.feature'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stdout '^added\tfeatures/new\.feature\t\.ness/ness\.toml \(new under frozen glob features/\*\.feature\)$'
+! stdout 'notes\.txt'
+exec sh -c 'cd .worktrees/r-* && git add -A && git commit -q -m new'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stdout '^added\tfeatures/new\.feature\t'
+# Amended with the operator's words: passes.
+exec sh -c 'd=$(cd .worktrees/r-* && pwd -P | sed "s/[^A-Za-z0-9]/-/g"); mkdir -p $HOME/.claude/projects/$d; cp ../typed.jsonl $HOME/.claude/projects/$d/$CS.jsonl'
+exec sh -c 'cd .worktrees/r-* && ness contract amend features/new.feature --reason "new flow" --authorized "add the new feature"'
+stdout '^amending features/new\.feature \(project-wide, by the operator.s words\); it lands with this branch$'
+exec sh -c 'cd .worktrees/r-* && git add -A && git commit -q -m amend && ness contract check'
+stdout '^ok\t'
+! stdout 'added'
+
+-- b.md --
+brief
+-- pay.feature --
+Feature: pay
+  Scenario: pays
+    When they pay
+    Then it works
+-- new.feature --
+Feature: new
+  Scenario: fresh
+    Given x
+-- write-new.json --
+{"tool_name":"Write","tool_input":{"file_path":"features/new.feature"}}
+-- typed.jsonl --
+{"type":"user","message":{"role":"user","content":"yes, add the new feature under features"},"promptSource":"typed","origin":{"kind":"human"}}

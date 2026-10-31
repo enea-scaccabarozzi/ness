@@ -1,0 +1,55 @@
+# ness hook is a silent exit 0 outside a ness project, without NESS_SESSION, and for a session the
+# store does not know — whatever the payload. An unknown event fails open (exit 0).
+# covers: R-HOOK-002, R-HOOK-016, R-CFG-053
+# No repository at all.
+exec ness hook session-start
+! stdout .
+! stderr .
+stdin garbage.txt
+exec ness hook pre-tool
+! stdout .
+! stderr .
+stdin blocked.json
+exec ness hook pre-tool
+! stdout .
+! stderr .
+exec ness hook nope
+! stdout .
+! stderr .
+# A repository without .ness/ness.toml: other commands refuse, hook does not.
+cd repo
+exits 4 ness sync
+stdin ../blocked.json
+exec ness hook pre-tool
+! stdout .
+! stderr .
+# A ness project, but NESS_SESSION names a session the store does not know.
+exec ness init --gate true --base main --yes
+exec ness hook nope
+! stdout .
+! stderr .
+env NESS_SESSION=s-000000000000
+exec ness hook nope
+! stdout .
+! stderr .
+stdin ../blocked.json
+exec ness hook pre-tool
+! stdout .
+! stderr .
+stdin ../garbage.txt
+exec ness hook session-start
+! stdout .
+! stderr .
+# Bound to nothing (no NESS_SESSION) inside the project.
+env NESS_SESSION=
+stdin ../blocked.json
+exec ness hook pre-tool
+! stdout .
+! stderr .
+exec ness hook session-start
+stdout '^ness: this conversation is not a ness session yet'
+
+-- garbage.txt --
+{not json at all
+-- blocked.json --
+{"tool_name":"Bash","tool_input":{"command":"while true; do ness inbox; sleep 5; done"}}

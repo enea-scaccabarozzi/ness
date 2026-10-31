@@ -1,0 +1,26 @@
+# A child whose work was squashed onto its base by hand (its branch is no ancestor of the base, but
+# merging it changes nothing there) closes without --discard; the base's sha is recorded.
+# covers: R-SESS-167
+cd repo
+exec ness init --gate true --base main --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+store get $R branch RB
+exec sh -c 'cd .worktrees/r-* && NESS_SESSION=$R ness open --scope h --tier standard --brief ../../../b.md'
+store last-session H
+store get $H branch HB
+env NESS_SESSION=$R
+exec sh -c 'cd .worktrees/h-* && printf "## Lessons\nNone.\n" > docs/sessions/r/h/report.md && echo h > h.txt && git add -A && git commit -q -m work'
+exec sh -c 'cd .worktrees/r-* && git merge -q --squash $HB && git commit -q -m "squash h by hand"'
+! exec git merge-base --is-ancestor $HB $RB
+exec ness close $H
+stdout '^nothing to integrate: session/h-[^ ]+ is already in session/r-[^ ]+; recorded [0-9a-f]{40}$'
+stdout '^closed s-[0-9a-f]{12} \(h\)$'
+store session $H closed=true
+store get $H integrated REF
+exec sh -c 'test "$REF" = "$(git rev-parse $RB)"'
+
+-- b.md --
+b

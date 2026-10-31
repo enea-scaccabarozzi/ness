@@ -1,0 +1,4 @@
+```sh
+make validate
+echo "a &amp; b &lt; c"
+```

@@ -1,0 +1,4 @@
+<pre>| id | state |
+|---|---|
+| a | GREEN |
+| b | RED |</pre>

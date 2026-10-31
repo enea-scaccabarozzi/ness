@@ -1,0 +1,11 @@
+# want: run
+name = "local"
+
+[[checks]]
+id = "c1"
+on = "open"
+skill = "ness-entry"
+section = "Communicate"
+message = "fix it"
+kind = "checkpoint-since-landing"
+run = "true"

@@ -1,0 +1,82 @@
+# A profile check for the close event runs in the close preconditions, before any state change: a
+# failing check refuses (exit 4) with message, detail and pointer and leaves the row open and the
+# tab, worktree and branch in place; a passing check lets the close proceed. for = "child" checks
+# run for a closed child and not for a closed root, for = "root" the other way round.
+# covers: R-CHK-001, R-CHK-003, R-CHK-004, R-CHK-006, R-CHK-009, R-CHK-010
+cd repo
+exec ness init --gate true --base main --yes
+cp ../ness.toml .ness/ness.toml
+mkdir .ness/profiles/local
+cp ../profile.toml .ness/profiles/local/profile.toml
+exec ness sync
+exec git add -A
+exec git commit -q -m 'ness init'
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+exec sh -c 'cd .worktrees/r-* && NESS_SESSION=$R ness open --scope c --tier standard --brief ../../../b.md'
+store last-session C
+exec sh -c 'cd .worktrees/c-* && printf "## Lessons\\nNone.\\n" > docs/sessions/r/c/report.md && git add -A && git commit -q -m report && NESS_SESSION=$C ness integrate --subject "feat: c"'
+fake herdr tabs 2
+
+# The child is closable but for the check: refused, nothing touched.
+env NESS_SESSION=$R
+exits 4 ness close $C
+stderr 'ness close refused: Create the allow-child file\. \(skill ness-entry, section Communicate\)'
+stderr '^  local/needs-allow-child: no allow-child file$'
+! stderr 'local/needs-allow-root'
+store session $C closed=false
+fake herdr tabs 2
+exec git branch --list 'session/c-*'
+stdout 'session/c-'
+exec git worktree list
+stdout 'worktrees/c-'
+# The check saw the closed session's context.
+grep '^close s-[0-9a-f]{12} session/c-[0-9a-f]{12} session/r-[0-9a-f]{12} docs/sessions/r/c .*worktrees/c-' $WORK/close.log
+
+# It passes: the close proceeds.
+exec touch $WORK/allow-child
+exec ness close $C
+stdout '^closed s-[0-9a-f]{12} \(c\)$'
+store session $C closed=true
+
+# The root: the for = "child" check (its file is gone again) does not run, the for = "root" one does.
+exec rm $WORK/allow-child
+env NESS_SESSION=
+exec sh -c 'cd .worktrees/r-* && printf "## Lessons\\nNone.\\n" > docs/sessions/r/report.md && git add -A && git commit -q -m report && NESS_SESSION=$R ness integrate --subject "feat: r"'
+exits 4 ness close $R
+stderr 'ness close refused: Create the allow-root file\. \(skill ness-entry, section Communicate\)'
+stderr '^  local/needs-allow-root: no allow-root file$'
+! stderr 'local/needs-allow-child'
+store session $R closed=false
+exec touch $WORK/allow-root
+exec ness close $R
+store session $R closed=true
+
+-- ness.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"
+profiles = ["local"]
+-- profile.toml --
+name = "local"
+
+[[checks]]
+id      = "needs-allow-child"
+on      = "close"
+for     = "child"
+skill   = "ness-entry"
+section = "Communicate"
+message = "Create the allow-child file."
+run     = 'echo "$NESS_EVENT $NESS_SESSION $NESS_BRANCH $NESS_INTO $NESS_RECORD $NESS_WORKTREE" >> "$WORK/close.log"; test -e "$WORK/allow-child" || { echo "no allow-child file"; exit 3; }'
+
+[[checks]]
+id      = "needs-allow-root"
+on      = "close"
+for     = "root"
+skill   = "ness-entry"
+section = "Communicate"
+message = "Create the allow-root file."
+run     = 'test -e "$WORK/allow-root" || { echo "no allow-root file"; exit 3; }'
+-- b.md --
+b

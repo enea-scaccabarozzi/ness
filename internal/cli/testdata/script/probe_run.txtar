@@ -1,0 +1,68 @@
+# probe run runs the floor now in the current checkout, prints the state and the redacted
+# evidence, records nothing and exits 0 only for GREEN; a floorless probe prints the scope.
+# covers: R-PRB-063, R-PRB-039, R-PRB-020, R-PRB-021, R-PRB-022
+cd repo
+exec ness init --gate true --base main --yes
+exec sh -c 'printf "features = [\"probes\"]\n[probes]\nredact_env = [\"SECRET\"]\n" >> .ness/ness.toml'
+exec git add -A
+exec git commit -q -m 'ness init'
+env SECRET=hunter2
+cp ../notify.md ../green.md ../red.md ../unclear.md ../vacuous.md ../floorless.md .
+! exists .git/ness
+exec ness probe run green.md
+stdout '^GREEN$'
+stdout '^n=1 token=\[redacted\]$'
+! stdout hunter2
+! exists .git/ness/state.sqlite3
+exits 1 ness probe run red.md
+stdout '^RED$'
+exits 1 ness probe run unclear.md
+stdout '^UNCLEAR \(timeout\)$'
+exits 1 ness probe run vacuous.md
+stdout '^VACUOUS$'
+exec ness probe run floorless.md
+stdout '^no floor$'
+stdout 'look around'
+exec ness probe run green.md --json
+stdout '"schema": 1'
+stdout '"state": "GREEN"'
+exits 4 ness probe run missing.md
+exec ness probe run notify.md
+stdout '^GREEN$'
+! exists .git/ness/state.sqlite3
+
+-- green.md --
+---
+every: 1m
+floor: echo n=1 token=$SECRET
+expect: n>=1
+---
+-- notify.md --
+---
+every: 1m
+floor: true
+notify: judged
+channel: releases
+---
+-- red.md --
+---
+every: 1m
+floor: exit 1
+---
+-- unclear.md --
+---
+every: 1m
+floor: sleep 30
+timeout: 200ms
+---
+-- vacuous.md --
+---
+every: 1m
+floor: echo n=0
+expect: n>=1
+---
+-- floorless.md --
+---
+every: 1m
+---
+look around

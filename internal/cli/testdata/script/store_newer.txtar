@@ -1,0 +1,20 @@
+# A store written by a newer ness is refused with exit 4 and the fix (R-MSG-046, R-CFG-036):
+# send and inbox write nothing, and the hook stays silent (R-HOOK-002).
+# covers: R-MSG-046
+cd repo
+exec ness init --gate true --base main --yes
+store add-session s-aaaaaaaaaaaa root
+store set-version 99
+env NESS_SESSION=s-aaaaaaaaaaaa
+exits 4 ness send --to operator --body hi
+stderr 'upgrade ness'
+! stdout .
+exits 4 ness inbox
+stderr 'upgrade ness'
+! stdout .
+exec ness hook pre-tool
+! stdout .
+! stderr .
+# Back at this binary's version, the refused send left no item.
+store set-version current
+store items operator 0

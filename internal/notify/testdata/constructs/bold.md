@@ -1,0 +1,1 @@
+This is **strong** and __also strong__.

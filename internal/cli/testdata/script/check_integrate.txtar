@@ -1,0 +1,84 @@
+# A profile check for the integrate event runs before the throwaway worktree and the gate: a
+# failing run check, or a branch-forbids kind over the real branch diff, refuses (exit 4) with
+# message, detail and pointer, and the gate never runs, the manager's branch and the store are
+# untouched; once the check passes the integrate lands. A check for another event never runs.
+# covers: R-CHK-001, R-CHK-004, R-CHK-006, R-CHK-009, R-CHK-010, R-CHK-012
+cd repo
+exec ness init --gate 'pwd > $WORK/gate-cwd' --base main --yes
+cp ../ness.toml .ness/ness.toml
+mkdir .ness/profiles/local
+cp ../profile.toml .ness/profiles/local/profile.toml
+exec ness sync
+exec git add -A
+exec git commit -q -m 'ness init'
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+exec sh -c 'cd .worktrees/r-* && NESS_SESSION=$R ness open --scope c --tier standard --brief ../../../b.md'
+store last-session C
+exec sh -c 'cd .worktrees/r-* && git rev-parse HEAD'
+cp stdout ../r-before
+
+# The child commits a record note that adds a forbidden line, with the run check also failing.
+exec sh -c 'cd .worktrees/c-* && echo "FORBIDDEN word" > docs/sessions/r/c/notes.md && git add -A && git commit -q -m notes'
+exec sh -c 'cd .worktrees/c-* && NESS_SESSION=$C ness integrate --subject "feat: x" 2>&1; echo "exit $?"'
+stdout 'exit 4'
+stdout 'ness integrate refused: Do not write forbidden words\. \(skill ness-entry, section Communicate\)'
+stdout '^  local/no-forbidden: '
+stdout 'FORBIDDEN'
+stdout 'ness integrate refused: Create the allow-int file\. \(skill ness-entry, section Communicate\)'
+stdout '^  local/needs-allow-int: no allow-int file$'
+# Nothing happened: no gate, no throwaway worktree, no landing, the target branch is unchanged.
+! exists $WORK/gate-cwd
+exec git worktree list
+! stdout 'ness/tmp-'
+store session $C integrated=
+exec sh -c 'cd .worktrees/r-* && git rev-parse HEAD'
+cmp stdout ../r-before
+# The run check saw the integrate context.
+grep '^integrate s-[0-9a-f]{12} session/c-[0-9a-f]{12} session/r-[0-9a-f]{12} docs/sessions/r/c .*worktrees/c-' $WORK/int.log
+# A check for another event never ran.
+! exists $WORK/other.log
+
+# Fixing both lets the integrate land.
+exec sh -c 'cd .worktrees/c-* && echo "fine" > docs/sessions/r/c/notes.md && git add -A && git commit -q -m notes2'
+exec touch $WORK/allow-int
+exec sh -c 'cd .worktrees/c-* && NESS_SESSION=$C ness integrate --subject "feat: x"'
+stdout '^integrated session/c-[0-9a-f]{12} into session/r-[0-9a-f]{12} at [0-9a-f]{40}$'
+exists $WORK/gate-cwd
+
+-- ness.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = 'pwd > $WORK/gate-cwd'
+profiles = ["local"]
+-- profile.toml --
+name = "local"
+
+[[checks]]
+id      = "no-forbidden"
+on      = "integrate"
+for     = "child"
+skill   = "ness-entry"
+section = "Communicate"
+message = "Do not write forbidden words."
+kind    = "branch-forbids"
+path    = '{record}/notes\.md$'
+pattern = 'FORBIDDEN'
+
+[[checks]]
+id      = "needs-allow-int"
+on      = "integrate"
+skill   = "ness-entry"
+section = "Communicate"
+message = "Create the allow-int file."
+run     = 'echo "$NESS_EVENT $NESS_SESSION $NESS_BRANCH $NESS_INTO $NESS_RECORD $NESS_WORKTREE" >> "$WORK/int.log"; test -e "$WORK/allow-int" || { echo "no allow-int file"; exit 3; }'
+
+[[checks]]
+id      = "close-only"
+on      = "close"
+skill   = "ness-entry"
+section = "Communicate"
+run     = 'echo ran >> "$WORK/other.log"; exit 3'
+-- b.md --
+b

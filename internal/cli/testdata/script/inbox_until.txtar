@@ -1,0 +1,24 @@
+# ness inbox --boundary NOTE --until TIME parks the session until TIME: RFC 3339, YYYY-MM-DD or
+# YYYY-MM-DDTHH:MM (UTC). --until without --boundary, or in the past, is refused and parks nothing.
+# A boundary without --until parks with no until-time.
+# covers: R-MSG-034
+cd repo
+exec ness init --gate true --base main --yes
+env NESS_TEST_NOW=2026-10-27T10:00:00Z
+store add-session s-aaaaaaaaaaaa root
+store add-session s-bbbbbbbbbbbb child-b s-aaaaaaaaaaaa
+env NESS_SESSION=s-bbbbbbbbbbbb
+! exec ness inbox --until 2026-10-28
+stderr 'until'
+store session s-bbbbbbbbbbbb parked=false
+! exec ness inbox --boundary 'state written' --until 2026-10-27T09:00
+stderr 'until'
+store session s-bbbbbbbbbbbb parked=false boundary=
+exec ness inbox --boundary 'release window' --until 2026-10-27T18:00:00Z
+store session s-bbbbbbbbbbbb 'boundary=release window' parked=2026-10-27T10:00:00Z parked_until=2026-10-27T18:00:00Z 'parked_note=release window'
+exec ness inbox --boundary 'tomorrow' --until 2026-10-28
+store session s-bbbbbbbbbbbb parked_until=2026-10-28T00:00:00Z parked_note=tomorrow
+exec ness inbox --boundary 'evening' --until 2026-10-27T18:30
+store session s-bbbbbbbbbbbb parked_until=2026-10-27T18:30:00Z parked_note=evening
+exec ness inbox --boundary 'no time'
+store session s-bbbbbbbbbbbb parked=2026-10-27T10:00:00Z parked_until=false 'parked_note=no time'

@@ -1,0 +1,128 @@
+# Under policy jev, doctor's jev check (listed last, after secrets) warns, never fails: an unset key
+# warns once naming models.jev.key with no request (the secrets check does not repeat it); one POST
+# /v1/systemone probing the pinned model decides the rest: 200 ok, 404/422 warn naming the model,
+# 401 and other statuses warn with the status, an unreachable endpoint warns. The exit status stays what the other checks make it (0 here) and the key never
+# appears in the output. Under policy declared the check is ok with detail "policy declared".
+# covers: R-DOC-025
+cd repo
+exec ness init --gate true --base main --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+env NESS_TEST_NOW=2026-10-08T10:00:00Z
+store heartbeat 5 0.1.0
+exec sh -c 'which ness'
+cp stdout ../nesspath
+exec sh -c 'mkdir -p $HOME/.config/systemd/user && printf "[Service]\nExecStart=%s worker run\n" "$(cat ../nesspath)" > $HOME/.config/systemd/user/ness-repo.service'
+
+# Rejects: a jev check missing under declared, or one that is not ok there.
+exec ness doctor
+stdout '^ok\tjev\tpolicy declared$'
+! stdout '^fail'
+
+# Rejects: an unset key that fails the doctor, warns twice (jev and secrets), or does not name the key.
+cp ../jev.toml .ness/ness.toml
+exec git commit -q -am 'policy jev'
+env TYPESAFE_API_KEY=
+exec ness doctor
+stdout '^warn\tjev\t.*models\.jev\.key'
+stdout -count=1 'models\.jev\.key'
+! stdout '^fail'
+
+# Rejects: a check that still reads GET /v1/models (a list of aliases only: the pin is never there),
+# that sends a GET or another path, or that sends anything but the pinned model and the probe state.
+env TYPESAFE_API_KEY=ts-fake-k3y-7f3a
+mkdir $NESS_TEST_FAKES/jev/v1
+cp ../models.aliases $NESS_TEST_FAKES/jev/v1/models
+cp ../probe.ok $NESS_TEST_FAKES/jev/v1/systemone
+exec rm -f $NESS_TEST_FAKES/http.json
+exec ness doctor
+stdout '^ok\tjev\t.*jev-1\.14\.0'
+! stdout '^warn\tjev'
+! stdout ts-fake-k3y
+fake http requests 1
+fake http url 1 URL
+exec sh -c 'test "$URL" = "https://api.typesafe.ai/v1/systemone"'
+fake http body 1 ../probe.sent
+grep '"model":"jev-1\.14\.0"' ../probe.sent
+grep '"task":"ness doctor probe"' ../probe.sent
+grep '"type":"noul"' ../probe.sent
+! grep ts-fake-k3y ../probe.sent
+
+# Rejects: an unset key that still sends a request.
+env TYPESAFE_API_KEY=
+exec rm -f $NESS_TEST_FAKES/http.json
+exec ness doctor
+! fake http requests 1
+env TYPESAFE_API_KEY=ts-fake-k3y-7f3a
+
+# Rejects: an ok when the pinned model is refused (404 or 422), or a warning that does not name it,
+# or one that quotes the body.
+cp ../probe.404 $NESS_TEST_FAKES/jev/v1/systemone
+exec ness doctor
+stdout '^warn\tjev\t.*jev-1\.14\.0.*404'
+! stdout 'no such model'
+! stdout '^fail'
+cp ../probe.422 $NESS_TEST_FAKES/jev/v1/systemone
+exec ness doctor
+stdout '^warn\tjev\t.*jev-1\.14\.0.*422'
+! stdout '^fail'
+
+# Rejects: a rejected key that is ok or fails, or quotes the body (it echoes the key).
+cp ../probe.401 $NESS_TEST_FAKES/jev/v1/systemone
+exec ness doctor
+stdout '^warn\tjev\t.*401'
+! stdout ts-fake-k3y
+! stdout '^fail'
+
+# Rejects: a server error that reads as ok or fails, or omits the status.
+cp ../probe.500 $NESS_TEST_FAKES/jev/v1/systemone
+exec ness doctor
+stdout '^warn\tjev\t.*500'
+! stdout '^fail'
+
+# Rejects: an unreachable endpoint that fails the doctor (offline is a warning).
+cp ../jev-offline.toml .ness/ness.toml
+exec git commit -q -am 'endpoint offline'
+exec ness doctor
+stdout '^warn\tjev\t.*(unreachable|offline)'
+! stdout '^fail'
+! stdout ts-fake-k3y
+! stderr ts-fake-k3y
+
+-- jev.toml --
+ness = "0.1"
+project = "repo"
+base = "main"
+gate = "true"
+[models]
+policy = "jev"
+[models.jev]
+key = "env:TYPESAFE_API_KEY"
+-- jev-offline.toml --
+ness = "0.1"
+project = "repo"
+base = "main"
+gate = "true"
+[models]
+policy = "jev"
+[models.jev]
+key = "env:TYPESAFE_API_KEY"
+endpoint = "https://jev.invalid"
+-- models.aliases --
+200
+{"models":[{"name":"jev-latest","description":"latest","release_date":"2026-09-01"},{"name":"jev-preview","description":"preview","release_date":"2026-10-01"}]}
+-- probe.ok --
+200
+{"answers":{"probe":{"answer":0.9}}}
+-- probe.404 --
+404
+{"detail":"no such model"}
+-- probe.422 --
+422
+{"detail":"no such model"}
+-- probe.401 --
+401
+{"detail":{"error_type":"authentication_error","message":"Cannot authenticate with key ts-fake-k3y-7f3a."}}
+-- probe.500 --
+500
+{"detail":"boom"}

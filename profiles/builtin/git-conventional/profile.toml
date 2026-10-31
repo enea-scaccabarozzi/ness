@@ -1,0 +1,6 @@
+name    = "git-conventional"
+summary = "Conventional Commits with trailers, checked by a commit-msg hook"
+
+[files]
+".agents/skills/ness-git-conventional/SKILL.md" = { own = "skills/ness-git-conventional/SKILL.md" }
+".githooks/commit-msg"                           = { own = "commit-msg" }

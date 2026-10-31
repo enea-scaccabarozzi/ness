@@ -1,0 +1,70 @@
+# ness size prints a root's size and the valid ones; the root or the operator (--session ID)
+# changes it, to a known size only; growing prints the obligations of the new size. status shows the
+# size of roots only (text and JSON) and the session-start identity line carries it.
+# covers: R-SESS-160, R-SESS-161, R-SESS-162, R-HOOK-027
+cd repo
+exec ness init --gate true --base main --yes
+cp ../ness.toml .ness/ness.toml
+exec git add -A
+exec git commit -q -m 'ness init'
+exec ness open --root --scope q --tier standard --size quick --brief ../b.md
+store last-session Q
+store add-launch s-bbbbbbbbbbbb kid $Q tier=standard
+# Printing: the operator names the root; the root needs no argument.
+exits 4 ness size
+stderr 'name the root with --session ID'
+exec ness size --session $Q
+stdout '^size quick \(quick, full\)$'
+env NESS_SESSION=$Q
+exec ness size
+stdout '^size quick \(quick, full\)$'
+# Resizing: unknown refused; the operator may resize any root; the new size's obligations print.
+exits 4 ness size huge
+stderr 'size "huge" is not one of: quick, full'
+env NESS_SESSION=
+exec ness size full --session $Q
+stdout '^size full: write specs.md and plan.md before the next commit \(ness-entry ## Full session\)$'
+store session $Q size=full
+exits 4 ness size quick --session s-bbbbbbbbbbbb
+stderr 'children have no size'
+# status: roots show the size after the tier, children nothing.
+exec ness status
+stdout 'standard full'
+! stdout 'kid\tstandard (quick|full)'
+exec ness status --json
+stdout '"size": "full"'
+stdout '"size": ""'
+# The identity line of session-start carries the size of a root and nothing for a child.
+env NESS_SESSION=$Q
+stdin ../startup.json
+exec ness hook session-start
+stdout '^ness session s-[0-9a-f]{12} scope q manager operator size full phase ready$'
+env NESS_SESSION=s-bbbbbbbbbbbb
+stdin ../startup.json
+exec ness hook session-start
+stdout '^ness session s-bbbbbbbbbbbb scope kid manager s-[0-9a-f]{12} phase ready$'
+# Closed children are history: with the kid closed, the root shrinks to quick.
+env NESS_SESSION=
+store close-session s-bbbbbbbbbbbb
+exec ness size quick --session $Q
+stdout '^size quick: '
+# A root shows and changes only its own size.
+env NESS_SESSION=$Q
+exits 4 ness size --session s-bbbbbbbbbbbb
+stderr 'a root shows and changes only its own size'
+# The operator resizes no closed root.
+env NESS_SESSION=
+store close-session $Q
+exits 4 ness size full --session $Q
+stderr 'is closed'
+
+-- b.md --
+b
+-- startup.json --
+{"hook_event_name":"SessionStart","source":"startup","session_id":"c0ffee"}
+-- ness.toml --
+ness = "0.1"
+project = "demo-app"
+base = "main"
+gate = "true"
+sessions = "rec"

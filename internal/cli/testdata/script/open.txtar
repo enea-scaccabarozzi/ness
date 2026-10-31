@@ -1,0 +1,72 @@
+# ness open launches a root and a child: worktree and branch under the primary checkout, the
+# child's branch from the manager's, nested record dirs with the brief bytes, a herdr tab titled
+# from --title, the agent named <project>-<scope>, started with --session-id, explicit effort and the
+# session named <project>/<title> but no prompt argument, the one-line prompt submitted once through
+# agent prompt, NESS_SESSION/NESS_RUN in the tab, nothing typed, the row ready. The economy tier edited in ness.toml reaches the launch.
+# covers: R-SESS-020, R-SESS-021, R-SESS-022, R-SESS-025, R-SESS-026, R-SESS-027, R-SESS-028, R-SESS-030, R-SESS-032, R-SESS-035, R-SESS-037, R-SESS-043, R-CFG-041, R-MOD-003, R-MOD-004, R-MOD-011, R-MOD-040, R-SESS-008, R-SESS-120
+cd repo
+exec ness init --gate true --base main --yes
+cp ../ness.toml .ness/ness.toml
+exec git add -A
+exec git commit -q -m 'ness init'
+# A root: the operator opens it with --root.
+exec ness open --root --scope prog --tier standard --brief ../brief.md
+stdout '^opened s-[0-9a-f]{12} scope prog branch session/prog-[0-9a-f]{12} record rec/prog tier standard \(explicit\)$'
+store sessions 1
+store last-session ROOT
+exec git worktree list
+stdout 'repo/\.worktrees/prog-[0-9a-f]{12}'
+exec git branch --list 'session/prog-*'
+stdout 'session/prog-'
+fake herdr tabs 1
+fake herdr tab prog
+fake herdr agents '^demo-app-prog$'
+fake herdr typed 0
+fake herdr env NESS_RUN=1
+fake herdr args '^--session-id [0-9a-f-]{36} --remote-control=demo-app/prog --model opus --effort medium --name demo-app/prog --dangerously-skip-permissions$'
+! fake herdr args 'You are ness'
+fake herdr prompted 1
+fake herdr prompt '^You are ness session s-[0-9a-f]{12} \(prog\)\. Read rec/prog/brief\.md, then load ness-entry\.$'
+exists .worktrees
+# The brief landed in the worktree's record dir, byte for byte.
+exec sh -c 'cmp ../brief.md .worktrees/prog-*/rec/prog/brief.md'
+# The root commits on its branch, so its HEAD is no longer main's (R-SESS-021 is then not vacuous).
+exec sh -c 'cd .worktrees/prog-* && echo work > root.txt && git add root.txt && git commit -q -m root'
+# A child from inside the root: economy tier (edited to haiku), title given, effort overridden.
+exec sh -c 'cd .worktrees/prog-* && NESS_SESSION=$ROOT ness open --scope sync --tier economy --effort high --title "Sync work" --brief ../../../brief.md'
+stdout '^opened s-[0-9a-f]{12} scope sync branch session/sync-[0-9a-f]{12} record rec/prog/sync tier economy \(explicit\)$'
+store sessions 2
+fake herdr tabs 2
+fake herdr tab 'Sync work'
+fake herdr agents '^demo-app-sync$'
+fake herdr args '--model haiku --effort high '
+fake herdr prompted 2
+fake herdr prompt '^You are ness session s-[0-9a-f]{12} \(sync\)\. Read rec/prog/sync/brief\.md, then load ness-entry\.$'
+fake herdr typed 0
+store last-session A
+fake herdr env NESS_SESSION=$A
+store session $A router_reason=explicit scope=sync parent=$ROOT
+# The child's branch starts from the root's branch, under the primary checkout's .worktrees.
+exec sh -c 'cd .worktrees/sync-* && git merge-base --is-ancestor $(git -C ../prog-* rev-parse HEAD) HEAD'
+exec sh -c 'test -f .worktrees/sync-*/root.txt'
+! exec sh -c 'git merge-base --is-ancestor $(git -C .worktrees/prog-* rev-parse HEAD) main'
+exec sh -c 'test -f .worktrees/sync-*/rec/prog/sync/brief.md'
+exec sh -c 'test ! -e .worktrees/prog-*/.worktrees'
+# The frontier tier passes medium explicitly; the stored tier keeps the table's effort.
+exec ness open --root --scope design --tier frontier --kind design --reason hard --brief ../brief.md
+fake herdr args '--model fable --effort medium '
+# A session cannot open a root (R-SESS-041) — see open_refusals; the tab title defaults to the scope.
+fake herdr tab design
+
+-- ness.toml --
+ness = "0.1"
+project = "demo-app"
+base = "main"
+gate = "true"
+sessions = "rec"
+[tiers.economy]
+claude = "haiku/medium"
+-- brief.md --
+# Brief
+
+Do the thing.

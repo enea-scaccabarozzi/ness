@@ -1,0 +1,49 @@
+# For a bound session, pre-tool refuses an Explore subagent (Agent, or the legacy Task) with exit 2,
+# naming ness-sweep and the rule's place; other subagent types pass; a sleep loop around
+# ness integrate is refused with the same pointer; unbound, everything passes.
+# covers: R-HOOK-025, R-HOOK-026, R-HOOK-014
+cd repo
+exec ness init --gate true --base main --yes
+store add-session s-aaaaaaaaaaaa root
+env NESS_SESSION=s-aaaaaaaaaaaa
+stdin ../explore.json
+exits 2 ness hook pre-tool
+stderr 'ness-sweep'
+stderr 'skill ness-entry, section Communicate'
+stdin ../task.json
+exits 2 ness hook pre-tool
+stderr 'ness-sweep'
+stderr 'skill ness-entry, section Communicate'
+stdin ../sweep.json
+exec ness hook pre-tool
+! stdout .
+! stderr .
+stdin ../loop.json
+exits 2 ness hook pre-tool
+stderr 'skill ness-entry, section Communicate'
+stdin ../once.json
+exec ness hook pre-tool
+! stdout .
+! stderr .
+stdin ../log-loop.json
+exec ness hook pre-tool
+! stdout .
+! stderr .
+env NESS_SESSION=
+stdin ../explore.json
+exec ness hook pre-tool
+! stdout .
+! stderr .
+
+-- explore.json --
+{"tool_name":"Agent","tool_input":{"description":"d","prompt":"find x","subagent_type":"Explore"}}
+-- task.json --
+{"tool_name":"Task","tool_input":{"description":"d","prompt":"find x","subagent_type":"Explore"}}
+-- sweep.json --
+{"tool_name":"Agent","tool_input":{"description":"d","prompt":"find x","subagent_type":"ness-sweep"}}
+-- loop.json --
+{"tool_name":"Bash","tool_input":{"command":"for i in $(seq 40); do ness integrate && break; sleep 60; done"}}
+-- once.json --
+{"tool_name":"Bash","tool_input":{"command":"ness integrate"}}
+-- log-loop.json --
+{"tool_name":"Bash","tool_input":{"command":"for b in a b; do git log $b; done; ness status"}}

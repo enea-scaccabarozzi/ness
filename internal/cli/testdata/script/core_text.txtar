@@ -1,0 +1,154 @@
+# Core renders ness-entry and ness-launch; the text defines the three sizes, the record files,
+# the waiting rule, the subagent summary cap, the no-mid-session-change rule, names standard as
+# the default tier and ness-sweep for searches; says when and how to ask the operator, the three
+# autonomy levels, the default reserved decisions and how a root closes itself; every slot
+# accepts an append from a profile, the reserved list before it; the autonomy default is "act within
+# the brief" until the local profile sets its own.
+# covers: R-BLT-106, R-BLT-010, R-BLT-011, R-BLT-012, R-BLT-013, R-BLT-014, R-BLT-015, R-BLT-016, R-BLT-019, R-BLT-061, R-MOD-002, R-MOD-021, R-BLT-101, R-BLT-102, R-BLT-108, R-BLT-103, R-BLT-104, R-BLT-105, R-PROF-080, R-PROF-082, R-PROF-083, R-MOD-063
+cd repo
+exec ness init --gate true --base main --yes
+grep 'Applies only when the `ness` command exists in this checkout. Otherwise ignore this block.' AGENTS.md
+exists .agents/skills/ness-entry/SKILL.md
+exists .agents/skills/ness-launch/SKILL.md
+grep '^name: ness-entry$' .agents/skills/ness-entry/SKILL.md
+grep '^name: ness-launch$' .agents/skills/ness-launch/SKILL.md
+grep '^## Child or subagent$' .agents/skills/ness-launch/SKILL.md
+grep 'Size alone \(up to about 1,500 lines\) is no reason for a' .agents/skills/ness-launch/SKILL.md
+grep 'never moves into a subagent to get past the cap' .agents/skills/ness-launch/SKILL.md
+grep 'to a subagent by default, to a child only when' .agents/skills/ness-entry/SKILL.md
+grep 'The full gate runs once, inside' .agents/skills/ness-entry/SKILL.md
+grep '^- \*\*answer\*\*' .agents/skills/ness-entry/SKILL.md
+grep '^- \*\*quick task\*\*' .agents/skills/ness-entry/SKILL.md
+grep '^- \*\*full session\*\*' .agents/skills/ness-entry/SKILL.md
+grep '`brief.md`' .agents/skills/ness-entry/SKILL.md
+grep '`specs.md`' .agents/skills/ness-entry/SKILL.md
+grep '`plan.md`' .agents/skills/ness-entry/SKILL.md
+grep '`decisions.md`' .agents/skills/ness-entry/SKILL.md
+grep '`report.md`' .agents/skills/ness-entry/SKILL.md
+grep '<sessions>/<root>/\[<child>/\]' .agents/skills/ness-entry/SKILL.md
+grep 'pull the inbox once, then end your turn' .agents/skills/ness-entry/SKILL.md
+grep 'no Monitor, no cron, no ScheduleWakeup, no sleep loops' .agents/skills/ness-entry/SKILL.md
+grep '8,000 characters' .agents/skills/ness-entry/SKILL.md
+grep 'never change mid-session' .agents/skills/ness-entry/SKILL.md
+grep '`ness-sweep`' .agents/skills/ness-entry/SKILL.md
+grep 'decision-first' .agents/skills/ness-entry/SKILL.md
+grep '^## Not in a session yet$' .agents/skills/ness-entry/SKILL.md
+grep 'When the operator asked you to start the work,' .agents/skills/ness-entry/SKILL.md
+grep '`ness open --root --here --scope SCOPE --tier TIER --size SIZE --brief FILE`' .agents/skills/ness-entry/SKILL.md
+grep 'without `--here`: it opens the root in its own tab' .agents/skills/ness-entry/SKILL.md
+grep '^## Ask the operator$' .agents/skills/ness-entry/SKILL.md
+grep 'only for what your manager cannot settle' .agents/skills/ness-entry/SKILL.md
+grep 'a fact only the operator has, an action only the operator can take' .agents/skills/ness-entry/SKILL.md
+grep 'Your manager gets a copy automatically' .agents/skills/ness-entry/SKILL.md
+grep 'the question first, the facts needed to answer it' .agents/skills/ness-entry/SKILL.md
+grep 'options with your recommendation, and what happens meanwhile' .agents/skills/ness-entry/SKILL.md
+grep 'They never open `ness inbox`' .agents/skills/ness-entry/SKILL.md
+grep 'Write the ask in full in your chat' .agents/skills/ness-entry/SKILL.md
+! grep 'reads alerts, not the chat' .agents/skills/ness-entry/SKILL.md
+! grep 'Put the same full text in the chat' .agents/skills/ness-entry/SKILL.md
+grep '`checkpoint`' .agents/skills/ness-entry/SKILL.md
+grep 'intent checkpoint' .agents/skills/ness-entry/SKILL.md
+# Compaction loses the rule that the operator reads only the chat.
+exec sh -c 'sed -n "/^## After compaction/,\$p" .agents/skills/ness-entry/SKILL.md'
+stdout 'never `ness inbox` and never answers on the phone'
+grep '`ness reply ITEM --body "their answer"`' .agents/skills/ness-entry/SKILL.md
+grep '^## Autonomy$' .agents/skills/ness-entry/SKILL.md
+grep 'set from the operator.s words; "me" in those words is the' .agents/skills/ness-entry/SKILL.md
+grep '^- \*\*plan first\*\*' .agents/skills/ness-entry/SKILL.md
+grep '^- \*\*report, then act\*\*' .agents/skills/ness-entry/SKILL.md
+grep '^- \*\*act within the brief\*\*' .agents/skills/ness-entry/SKILL.md
+grep 'A root never lowers the level the operator.s words set for a child' .agents/skills/ness-entry/SKILL.md
+grep 'approved in advance skips' .agents/skills/ness-entry/SKILL.md
+grep 'When your brief states no level, use this project.s default:$' .agents/skills/ness-entry/SKILL.md
+grep '^\*\*act within the brief\*\*\.$' .agents/skills/ness-entry/SKILL.md
+grep 'autonomy level \(plan first; report, then act; act within the brief: never lower than the$' .agents/skills/ness-launch/SKILL.md
+grep '^- irreversible actions$' .agents/skills/ness-entry/SKILL.md
+grep '^- money$' .agents/skills/ness-entry/SKILL.md
+grep '^- accounts and credentials$' .agents/skills/ness-entry/SKILL.md
+grep '^- publishing outside the repository$' .agents/skills/ness-entry/SKILL.md
+grep '^- policy changes$' .agents/skills/ness-entry/SKILL.md
+grep '^- scope beyond the brief$' .agents/skills/ness-entry/SKILL.md
+grep '^- non-trivial product decisions \(what users see, or what the product does or promises\), and any$' .agents/skills/ness-entry/SKILL.md
+grep '^  product call a test, a contract or a frozen file would lock in$' .agents/skills/ness-entry/SKILL.md
+grep '^`decision` item with the options and your recommendation\.$' .agents/skills/ness-entry/SKILL.md
+grep 'mark it PROVISIONAL in your handoff or report' .agents/skills/ness-entry/SKILL.md
+grep '`ness close <your id> --authorized "<the operator.s words>"`' .agents/skills/ness-entry/SKILL.md
+grep 'only after the operator said so in the chat' .agents/skills/ness-entry/SKILL.md
+grep 'Your tab stays open after the close' .agents/skills/ness-entry/SKILL.md
+grep 'Always pass `--subject`' .agents/skills/ness-launch/SKILL.md
+grep 'ignores it with a warning' .agents/skills/ness-launch/SKILL.md
+! grep 'omits `--subject`' .agents/skills/ness-launch/SKILL.md
+# Rejects: entry and launch guidance that drifts from the ladder text: the kind line, ness pick,
+# the one-rung escalate, --kind/--tier/--reason for children, and --tier up to escalate (R-MOD-063).
+exec sh -c 'sed -n "/^## Model and effort$/,/--tier up/p" .agents/skills/ness-entry/SKILL.md'
+cmp stdout ../entry-model.txt
+exec sh -c 'sed -n "/^## Tiers$/,/--resume ID --tier up/p" .agents/skills/ness-launch/SKILL.md'
+cmp stdout ../launch-tiers.txt
+! grep 'ness:slot' .agents/skills/ness-entry/SKILL.md
+! grep 'ness:slot' .agents/skills/ness-launch/SKILL.md
+# A local profile appends to every slot core provides.
+exec sh -c 'printf "profiles = [\"local\"]\n" >> .ness/ness.toml'
+exec ness sync
+grep '^- \*\*program\*\*: four' .agents/skills/ness-entry/SKILL.md
+grep '^- never force-push' .agents/skills/ness-entry/SKILL.md
+grep '^- reload the roadmap' .agents/skills/ness-entry/SKILL.md
+grep '^- pricing' .agents/skills/ness-entry/SKILL.md
+# The project's reserved decision lands after the default list.
+exec sh -c 'grep -A1 "^  product call a test, a contract or a frozen file would lock in" .agents/skills/ness-entry/SKILL.md'
+stdout '^- pricing$'
+grep '^  - invoke /ness-x-specify' .agents/skills/ness-entry/SKILL.md
+grep '^  - invoke /ness-x-plan' .agents/skills/ness-entry/SKILL.md
+grep '^  - invoke /ness-x-handoff' .agents/skills/ness-entry/SKILL.md
+grep '^- \*\*archivist\*\*' .agents/skills/ness-launch/SKILL.md
+# The local profile's autonomy default replaces core's.
+grep '^\*\*report, then act\*\*\.$' .agents/skills/ness-entry/SKILL.md
+! grep '^\*\*act within the brief\*\*\.$' .agents/skills/ness-entry/SKILL.md
+
+-- repo/.ness/profiles/local/profile.toml --
+name = "local"
+[slots]
+"ness-entry#sizes" = { append = "sizes.md" }
+"ness-entry#stop-and-ask" = { append = "stop.md" }
+"ness-entry#post-compact" = { append = "compact.md" }
+"ness-entry#reserved-decisions" = { append = "reserved.md" }
+"ness-entry#specify" = { append = "specify.md" }
+"ness-entry#plan" = { append = "plan.md" }
+"ness-entry#handoff" = { append = "handoff.md" }
+"ness-launch#tier-roles" = { append = "roles.md" }
+"ness-entry#autonomy-default" = { set = "autonomy.md" }
+-- repo/.ness/profiles/local/sizes.md --
+- **program**: four verticals and a map.
+-- repo/.ness/profiles/local/stop.md --
+- never force-push
+-- repo/.ness/profiles/local/compact.md --
+- reload the roadmap
+-- repo/.ness/profiles/local/reserved.md --
+- pricing
+-- repo/.ness/profiles/local/specify.md --
+  - invoke /ness-x-specify
+-- repo/.ness/profiles/local/plan.md --
+  - invoke /ness-x-plan
+-- repo/.ness/profiles/local/handoff.md --
+  - invoke /ness-x-handoff
+-- repo/.ness/profiles/local/roles.md --
+- **archivist**: economy.
+-- repo/.ness/profiles/local/autonomy.md --
+**report, then act**.
+-- entry-model.txt --
+## Model and effort
+Your model and effort never change mid-session. The project's ladder runs cheapest to strongest
+around a base rung; `ness pick` prints it. Do routine work at your own rung and give the rare
+hard step to a subagent at a higher rung: start every subagent prompt with `kind: <name>`
+(search, run, implement, debug, research, review, verify, design) and pass the model and effort
+`ness pick --kind <name>` gives. Named agents (ness-sweep, ness-review, ness-verify,
+ness-design) carry their own. To go one rung above the recommendation, add a line
+`escalate: <reason>`; the hook refuses anything higher and records every call. When your own
+session needs more, write your state down (`ness inbox --boundary NOTE`), end your turn, and
+let your manager resume you with `--tier up`.
+-- launch-tiers.txt --
+## Tiers
+A child runs at the project's base rung unless its job says otherwise: open it with
+`--kind <name>` and the selector picks the rung, or name one with `--tier` (a rung above the
+recommendation needs `--reason`). Choose by who judges the output: work a check or a reviewer
+will judge runs low; work whose output is itself the judgment (design between alternatives,
+conclusion audits) runs high. Escalate a stuck child with `ness open --resume ID --tier up`.

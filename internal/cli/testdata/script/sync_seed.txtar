@@ -1,0 +1,29 @@
+# A seed is created once, then belongs to the user: edits and deletion are respected.
+# covers: R-SYNC-070, R-SYNC-081, R-PROF-011
+cd repo
+exec ness sync
+cmp docs/ops.md .ness/profiles/local/ops.md
+cp ../mine.md docs/ops.md
+cp ../ops2.md .ness/profiles/local/ops.md
+exec ness sync
+cmp docs/ops.md ../mine.md
+rm docs/ops.md
+exec ness sync
+! exists docs/ops.md
+
+-- repo/.ness/ness.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"
+profiles = ["local"]
+-- repo/.ness/profiles/local/profile.toml --
+name = "local"
+[files]
+"docs/ops.md" = { seed = "ops.md" }
+-- repo/.ness/profiles/local/ops.md --
+ops v1
+-- ops2.md --
+ops v2
+-- mine.md --
+mine

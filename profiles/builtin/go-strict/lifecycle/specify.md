@@ -1,0 +1,2 @@
+  - invoke /ness-test-strategy
+  - invoke /ness-interface-design

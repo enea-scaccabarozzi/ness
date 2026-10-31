@@ -1,0 +1,34 @@
+# Within the pinned minor, generated files whose lock records an older patch are accepted:
+# send and inbox run without ness sync.
+# covers: R-CFG-014
+cd repo
+env NESS_TEST_VERSION=0.3.2
+store add-session s-aaaaaaaaaaaa root
+store add-session s-bbbbbbbbbbbb child-b s-aaaaaaaaaaaa
+env NESS_SESSION=s-bbbbbbbbbbbb
+exec ness send --to manager --body hello
+stdout '^sent m-'
+env NESS_SESSION=s-aaaaaaaaaaaa
+exec ness inbox
+stdout '\thello$'
+cmp .ness/lock.json ../lock.json
+
+-- repo/.ness/ness.toml --
+ness = "0.3"
+project = "p"
+base = "main"
+gate = "true"
+-- repo/.ness/lock.json --
+{
+  "entries": [],
+  "ness": "0.3.0",
+  "profiles": {},
+  "schema": 1
+}
+-- lock.json --
+{
+  "entries": [],
+  "ness": "0.3.0",
+  "profiles": {},
+  "schema": 1
+}

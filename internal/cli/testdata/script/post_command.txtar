@@ -1,0 +1,26 @@
+# The command channel gets raw Markdown on stdin and the thread key in NESS_THREAD_KEY, with
+# no length limit. A failing command's quoted output never shows the channel's token.
+# covers: R-NTF-029, R-NTF-042
+cd repo
+exec ness init --gate true --base main --yes
+exec sh -c 'cat ../channels.toml >> .ness/ness.toml'
+exec git add -A
+exec git commit -q -m 'ness init'
+exec sh -c 'yes "a long line of text" | head -5000 | head -c -1 > ../big.md'
+exec ness post --channel log --file ../big.md --thread k9
+cmp out ../big.md
+grep '^NESS_THREAD_KEY=k9$' env
+env LEAK_TOKEN=test-token
+! exec ness post --channel leak --file ../big.md --thread k9
+stderr 'token \*\*\*'
+! stderr 'test-token'
+
+-- channels.toml --
+features = ["notify"]
+[notify.channels.log]
+kind = "command"
+command = "cat > out; env > env"
+[notify.channels.leak]
+kind = "command"
+token = "env:LEAK_TOKEN"
+command = "echo token $LEAK_TOKEN; exit 1"

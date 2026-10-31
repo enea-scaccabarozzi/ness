@@ -1,0 +1,119 @@
+# The rich renderer of each surface, on a pipe (no color): doctor's glyph lines, fix lines and
+# counts; stats as a bordered table with the total last; inbox as a table and --show rendered
+# as Markdown; sync's glyph per change and release notes; status as a tree; result lines after a check; integrate's gate log under its header.
+# covers: R-UI-022, R-UI-023, R-UI-024, R-UI-025, R-UI-026, R-UI-027, R-UI-029
+env NESS_TEST_NOTES=$WORK/notes.md
+env NESS_TEST_VERSION=0.3.0
+cd repo
+exec ness init --gate 'echo gate-ran' --base main --yes
+exec git add -A
+exec git commit -q -m init
+env NESS_UI=rich
+env NESS_TEST_NOW=2026-10-09T12:00:00Z
+# doctor
+exits 1 ness doctor
+stdout '^ ness 0\.3\.0  at '
+stdout '^✗ worker +not running'
+stdout '^ +↳ fix: ness worker install'
+stdout '^✓ sync-drift +generated files are current'
+stdout '^\d+ ok · \d+ warn · \d+ fail$'
+! stdout '\tfix: '
+# status: a root with a child, the child waiting on the root.
+store add-launch s-aaaaaaaaaaaa root - tier=standard client=claude client_session=aaaaaaaa-0000-4000-8000-000000000001
+store add-launch s-bbbbbbbbbbbb kid s-aaaaaaaaaaaa tier=economy client=claude
+store add-launch s-cccccccccccc kid2 s-aaaaaaaaaaaa tier=economy client=claude
+store phase s-aaaaaaaaaaaa ready
+env NESS_SESSION=s-bbbbbbbbbbbb
+exec ness send --to manager --body @../dec.md --intent decision
+stdout '^sent m-'
+env NESS_SESSION=
+exec ness send --to s-aaaaaaaaaaaa --body 'from the operator' --intent fyi
+stdout '^✓ sent m-[a-z2-7]{8} to s-aaaaaaaaaaaa$'
+exec ness status
+stdout '^ ness  repo · base main'
+stdout '^ +● s-aaaaaaaaaaaa  root +standard full +ready +ctx - +idle - +waits 1 \(s-bbbbbbbbbbbb\)$'
+stdout '├─ ● s-bbbbbbbbbbbb  kid '
+stdout '└─ ● s-cccccccccccc  kid2 '
+stdout 'probes: feature off'
+! stdout '\t'
+# inbox
+env NESS_SESSION=s-aaaaaaaaaaaa
+exec ness --ui rich inbox
+stdout '╭'
+stdout '│ m-[a-z2-7]{8} │ s-bbbbbbbbbbbb │ ● decision +│ +0m │ # Decision needed'
+stdout '2 open · ness inbox --show ID'
+exec sh -c 'ness inbox --json | grep -o "m-[a-z2-7]\{8\}" | head -1 > ../id'
+exec sh -c 'ness --ui rich inbox --show $(cat ../id)'
+stdout 'Decision needed'
+! stdout '^# Decision'
+! stdout '\*\*one\*\*'
+env NESS_SESSION=
+# stats
+exec sh -c 'd=$(pwd -P | sed "s/[^A-Za-z0-9]/-/g"); mkdir -p $HOME/.claude/projects/$d; cp ../a.jsonl $HOME/.claude/projects/$d/aaaaaaaa-0000-4000-8000-000000000001.jsonl'
+exec ness stats
+stdout '^╭'
+stdout '│ session +│ sess │ turns │ compact │ +ctx │'
+stdout '│ s-aaaaaaaaaaaa │ +1 │'
+stdout '│ total +│ +1 │'
+stdout 'prices as of '
+# sync: a dry run marks each change; an upgrade renders its notes.
+rm CLAUDE.md
+env NESS_TEST_VERSION=0.3.1
+exec ness sync --dry-run
+stdout '^\+ create '
+stdout '^\+\+\+ CLAUDE\.md'
+exec ness sync
+stdout '0\.3\.1 release notes'
+stdout 'Running sessions'
+! stdout '^### '
+exec ness sync
+stdout '^✓ in sync: nothing to change$'
+# init with every value given asks nothing; a failed init prints no success line
+exec mkdir ../full
+exec git -C ../full init -q -b main
+exec git -C ../full commit -q --allow-empty -m init
+env NESS_TEST_TTY=1
+exec sh -c 'cd ../full && ness init --project full --base main --gate true --client claude --profile go-strict'
+stdout '^✓ ness is set up in full'
+! stdout 'ness init  set up'
+exits 4 ness init --gate true
+! stdout '✓'
+env NESS_TEST_TTY=
+# result lines, and integrate's gate log under its header
+exec git add -A
+exec git commit -q -m sync
+exec ness open --root --scope r --tier standard --brief ../dec.md
+stdout '^✓ opened s-[0-9a-f]{12} scope r '
+store last-session R
+exec sh -c 'cd .worktrees/r-* && echo a > a.txt && printf "## Lessons\nNone.\n" > docs/sessions/r/report.md && git add -A && git commit -q -m one'
+exec sh -c 'cd .worktrees/r-* && NESS_SESSION=$R ness --ui rich integrate --subject "feat: x"'
+stderr '^▸ gate echo gate-ran'
+stderr '^│ gate-ran$'
+stderr '^╰ 0s$'
+stdout '^✓ integrated session/r-'
+exec ness close $R
+stdout '^✓ closed s-[0-9a-f]{12} \(r\)$'
+-- notes.md --
+# Changelog
+
+## [0.3.1](https://example.com/compare/v0.3.0...v0.3.1) (2026-10-15)
+
+### Running sessions
+
+* nothing to do
+
+## [0.3.0](https://example.com/compare/v0.2.0...v0.3.0) (2026-10-10)
+
+### Features
+
+* first
+
+### Running sessions
+
+* nothing to do
+-- dec.md --
+# Decision needed
+
+Pick **one** of the two.
+-- a.jsonl --
+{"type":"assistant","timestamp":"2026-10-09T11:00:00Z","message":{"id":"m1","model":"claude-sonnet-5-5","usage":{"input_tokens":1000,"output_tokens":100,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}}

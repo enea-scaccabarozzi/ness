@@ -1,0 +1,12 @@
+name     = "behavior-specs"
+summary  = "Declarative godog scenarios with a shared step vocabulary, frozen with contracts (design §11)"
+requires = ["go-strict"]
+
+[features]
+enable = ["contracts"]
+
+[slots]
+"ness-entry#specify" = { append = "specify.md" }
+
+[files]
+".agents/skills/ness-behavior-specs/SKILL.md" = { own = "skills/ness-behavior-specs/SKILL.md" }

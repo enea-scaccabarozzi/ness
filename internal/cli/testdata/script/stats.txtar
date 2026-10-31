@@ -1,0 +1,101 @@
+# stats reads only the transcripts bound to this project's sessions, is read-only, filters
+# with --since, groups by session, tier, role and tool with one total, prints the same figures
+# as JSON, carries the router reason, includes closed sessions and lists codex sessions and
+# sessions without a transcript as not counted.
+# The calls of subagents (<session>/subagents/*.jsonl) are added to their session.
+# covers: R-STAT-002, R-STAT-003, R-STAT-004, R-STAT-005, R-STAT-006, R-STAT-009, R-STAT-012, R-STAT-013
+cd repo
+exec ness init --gate true --base main --yes
+exec git add -A
+exec git commit -q -m init
+env NESS_TEST_NOW=2026-10-09T12:00:00Z
+store add-launch s-aaaaaaaaaaaa root - tier=standard client=claude client_session=aaaaaaaa-0000-4000-8000-000000000001 router_reason='brief says review'
+store add-launch s-bbbbbbbbbbbb kid s-aaaaaaaaaaaa tier=economy client=claude client_session=bbbbbbbb-0000-4000-8000-000000000002
+store add-launch s-cccccccccccc codex-kid s-aaaaaaaaaaaa tier=economy client=codex client_session=cccccccc-0000-4000-8000-000000000003
+store add-launch s-dddddddddddd closed-kid s-aaaaaaaaaaaa tier=economy client=claude client_session=dddddddd-0000-4000-8000-000000000004
+store add-launch s-eeeeeeeeeeee lost-kid s-aaaaaaaaaaaa tier=economy client=claude client_session=eeeeeeee-0000-4000-8000-000000000005
+store close-session s-dddddddddddd
+exec sh -c 'd=$(pwd -P | sed "s/[^A-Za-z0-9]/-/g"); mkdir -p $HOME/.claude/projects/$d; cp ../a.jsonl $HOME/.claude/projects/$d/aaaaaaaa-0000-4000-8000-000000000001.jsonl; cp ../b.jsonl $HOME/.claude/projects/$d/bbbbbbbb-0000-4000-8000-000000000002.jsonl; cp ../b.jsonl $HOME/.claude/projects/$d/dddddddd-0000-4000-8000-000000000004.jsonl; mkdir -p $HOME/.claude/projects/$d/aaaaaaaa-0000-4000-8000-000000000001/subagents; cp ../sub.jsonl $HOME/.claude/projects/$d/aaaaaaaa-0000-4000-8000-000000000001/subagents/agent-1.jsonl; cp ../b.jsonl $HOME/.claude/projects/$d/99999999-0000-4000-8000-000000000009.jsonl'
+snap home $HOME
+snap tree
+exec ness stats
+stdout '^s-aaaaaaaaaaaa\t1\t3\t2\t3000\t1218000\t171100\t2415000\t1000000\t\$11\.98$'
+stdout '^s-bbbbbbbbbbbb\t1\t1\t0\t1000000\t1000000\t100000\t0\t0\t\$3\.00$'
+stdout '^s-dddddddddddd\t1\t1\t0\t1000000\t1000000\t100000\t0\t0\t\$3\.00$'
+! stdout 99999999
+stdout '^total\t3\t5\t2\t1000000\t3218000\t371100\t2415000\t1000000\t\$17\.98$'
+stdout '^not counted\ts-cccccccccccc\tcodex: not counted in v1$'
+stdout '^not counted\ts-eeeeeeeeeeee\tno transcript$'
+stdout '^prices\t2026-09-25$'
+samesnap home $HOME
+samesnap tree
+store sessions 5
+# --since: a date, a duration, and a future date; a word is a usage error.
+exec ness stats --since 2026-10-09
+stdout '^total\t3\t5\t2\t'
+exec ness stats --since 1h
+stdout '^total\t3\t2\t2\t'
+exec ness stats --since 2999-01-01
+stdout '^total\t3\t0\t0\t0\t0\t0\t0\t0\t\$0\.00$'
+exits 2 ness stats --since yesterday
+stderr 'want a date'
+# --by: every grouping has the same total; an unknown dimension is refused.
+exec ness stats --by tier
+stdout '^standard\t1\t3\t2\t3000\t'
+stdout '^economy\t2\t2\t0\t1000000\t2000000\t200000\t0\t0\t\$6\.00$'
+exec ness stats --by role
+stdout '^root\t1\t'
+stdout '^child\t2\t'
+exec ness stats --by tool
+stdout '^Read\t100$'
+stdout '^Bash\t29$'
+exec sh -c 'for by in session tier role tool; do ness stats --by $by | grep "^total"; done | sort -u | wc -l'
+stdout '^1$'
+exits 2 ness stats --by colour
+stderr 'accepted values are session, tier, role, rung, tool'
+# --json carries the same figures and the router reason.
+exec ness stats --json
+stdout '"cost_cents": 1798'
+stdout '"router_reason": "brief says review"'
+stdout '"price_date": "2026-09-25"'
+stdout '"reason": "codex: not counted in v1"'
+# A broken subagent file (a directory, a dangling link) is skipped and counted; the session keeps its figures.
+exec sh -c 'd=$(pwd -P | sed "s/[^A-Za-z0-9]/-/g"); s=$HOME/.claude/projects/$d/aaaaaaaa-0000-4000-8000-000000000001/subagents; mkdir $s/dir.jsonl; ln -s /nonexistent $s/dangling.jsonl'
+exec ness stats
+stdout '^s-aaaaaaaaaaaa\t1\t3\t2\t3000\t1218000\t171100\t2415000\t1000000\t\$11\.98$'
+exec ness stats --json
+stdout '"skipped_lines": 3'
+# A model the price table does not know: its tokens count, its cents do not, and the cost is a lower bound.
+store add-launch s-ffffffffffff odd-kid s-aaaaaaaaaaaa tier=economy client=claude client_session=ffffffff-0000-4000-8000-000000000006
+exec sh -c 'd=$(pwd -P | sed "s/[^A-Za-z0-9]/-/g"); cp ../odd.jsonl $HOME/.claude/projects/$d/ffffffff-0000-4000-8000-000000000006.jsonl'
+exec ness stats
+stdout '^s-ffffffffffff\t1\t1\t0\t1000000\t2000000\t200000\t0\t0\t\$3\.00\+ \(unpriced model: lower bound\)$'
+stdout '^total\t4\t6\t2\t.*\+ \(unpriced model: lower bound\)$'
+exec ness stats --json
+stdout '"unpriced": true'
+
+-- a.jsonl --
+{"type":"user","timestamp":"2026-10-09T10:00:00.000Z","message":{"role":"user","content":"do it"}}
+{"type":"assistant","timestamp":"2026-10-09T10:00:04.000Z","message":{"model":"claude-opus-5-5","usage":{"input_tokens":200000,"cache_creation_input_tokens":1000000,"cache_read_input_tokens":0,"output_tokens":10000,"cache_creation":{"ephemeral_5m_input_tokens":600000,"ephemeral_1h_input_tokens":400000}},"content":[{"type":"thinking","thinking":"hmm"}],"id":"msg_1"}}
+{"type":"assistant","timestamp":"2026-10-09T10:00:05.000Z","message":{"model":"claude-opus-5-5","usage":{"input_tokens":200000,"cache_creation_input_tokens":1000000,"cache_read_input_tokens":0,"output_tokens":10000,"cache_creation":{"ephemeral_5m_input_tokens":600000,"ephemeral_1h_input_tokens":400000}},"content":[{"type":"text","text":"ok"}],"id":"msg_1"}}
+{"type":"assistant","timestamp":"2026-10-09T10:00:05.500Z","message":{"model":"claude-opus-5-5","usage":{"input_tokens":200000,"cache_creation_input_tokens":1000000,"cache_read_input_tokens":0,"output_tokens":50000,"cache_creation":{"ephemeral_5m_input_tokens":600000,"ephemeral_1h_input_tokens":400000}},"content":[{"type":"tool_use","id":"t1","name":"Read","input":{}}],"id":"msg_1"}}
+{"type":"user","timestamp":"2026-10-09T10:00:06.000Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}]}}
+{"type":"assistant","timestamp":"2026-10-09T10:00:08.000Z","message":{"model":"claude-opus-5-5","usage":{"input_tokens":10000,"cache_creation_input_tokens":0,"cache_read_input_tokens":1200000,"output_tokens":4000},"content":[{"type":"text","text":"run"}],"id":"msg_2"}}
+{"type":"assistant","timestamp":"2026-10-09T10:00:09.000Z","message":{"model":"claude-opus-5-5","usage":{"input_tokens":10000,"cache_creation_input_tokens":0,"cache_read_input_tokens":1200000,"output_tokens":20000},"content":[{"type":"tool_use","id":"t2","name":"Bash","input":{}}],"id":"msg_2"}}
+{"type":"user","timestamp":"2026-10-09T10:00:10.000Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t2","content":[{"type":"text","text":"ok"}]}]}}
+{"type":"user","timestamp":"2026-10-09T11:00:00.000Z","message":{"role":"user","content":"next"}}
+{"type":"assistant","timestamp":"2026-10-09T11:00:04.000Z","message":{"model":"claude-opus-5-5","usage":{"input_tokens":5000,"cache_creation_input_tokens":0,"cache_read_input_tokens":1215000,"output_tokens":1000},"content":[{"type":"text","text":"done"}],"id":"msg_3"}}
+not json at all
+{"type":"user","timestamp":"2026-10-09T12:00:00.000Z","isCompactSummary":true,"message":{"role":"user","content":"This session is being continued"}}
+{"type":"assistant","timestamp":"2026-10-09T12:00:03.000Z","message":{"model":"claude-opus-5-5","usage":{"input_tokens":3000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":100},"content":[{"type":"text","text":"back"}]}}
+{"type":"assistant","timestamp":"2026-10-09T12:00:04.000Z","message":{"model":"<synthetic>","usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0},"content":[{"type":"text","text":"local"}],"id":"msg_4"}}
+{"type":"user","timestamp":"2026-10-09T12:30:00.000Z","isCompactSummary":true,"message":{"role":"user","content":"This session is being continued"}}
+-- b.jsonl --
+{"type":"user","timestamp":"2026-10-09T09:00:00.000Z","message":{"role":"user","content":"go"}}
+{"type":"assistant","timestamp":"2026-10-09T09:00:05.000Z","message":{"model":"claude-sonnet-5-5","usage":{"input_tokens":1000000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":100000},"content":[{"type":"text","text":"ok"}],"id":"msg_b1"}}
+-- sub.jsonl --
+{"type":"assistant","isSidechain":true,"timestamp":"2026-10-09T09:30:00.000Z","message":{"model":"claude-sonnet-5-5","usage":{"input_tokens":1000000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":100000},"content":[{"type":"text","text":"sub"}],"id":"msg_s1"}}
+-- odd.jsonl --
+{"type":"user","timestamp":"2026-10-09T09:00:00.000Z","message":{"role":"user","content":"go"}}
+{"type":"assistant","timestamp":"2026-10-09T09:00:05.000Z","message":{"model":"claude-sonnet-5-5","usage":{"input_tokens":1000000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":100000},"content":[{"type":"text","text":"ok"}],"id":"msg_o1"}}
+{"type":"assistant","timestamp":"2026-10-09T09:00:06.000Z","message":{"model":"claude-future-9","usage":{"input_tokens":1000000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":100000},"content":[{"type":"text","text":"ok"}],"id":"msg_o2"}}

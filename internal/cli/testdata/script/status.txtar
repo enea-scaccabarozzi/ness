@@ -1,0 +1,74 @@
+# status prints the active tree with tier, phase, context, idle minutes and obligations with whom
+# they wait on; --all adds closed sessions marked closed; a stalled launch shows as such; the
+# worker heartbeat age and version, or not running; --json carries every field. A row ends with
+# what the session waits on (`on ...`), nothing when it waits on nothing.
+# covers: R-SESS-080, R-WRK-099, R-SESS-082, R-SESS-084, R-SESS-085, R-SESS-086, R-SESS-033, R-CFG-053
+cd repo
+exec ness init --gate true --base main --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+env NESS_TEST_NOW=2026-10-08T10:00:00Z
+exec ness status
+stdout '^worker: not running$'
+exec ness open --root --scope prog --tier standard --brief ../b.md
+store last-session R
+exec sh -c 'cd .worktrees/prog-* && NESS_SESSION=$R ness open --scope a --tier economy --brief ../../../b.md'
+store last-session A
+exec sh -c 'cd .worktrees/prog-* && NESS_SESSION=$R ness open --scope b --tier standard --brief ../../../b.md'
+store last-session B
+# A transcript for the root: context and idle come from it.
+exec sh -c 'ness status --json | grep -o "\"client_session\": *\"[0-9a-f-]*\"" | head -1 | grep -o "[0-9a-f-]\{36\}" > ../cs'
+exec sh -c 'd=$(cd .worktrees/prog-* && pwd | sed "s#[^A-Za-z0-9]#-#g"); mkdir -p $HOME/.claude/projects/$d; printf "%s\n" "{\"type\":\"assistant\",\"message\":{\"usage\":{\"input_tokens\":1000,\"cache_read_input_tokens\":119000,\"cache_creation_input_tokens\":0}}}" > $HOME/.claude/projects/$d/$(cat ../cs).jsonl; touch -d 2026-10-08T09:55:00Z $HOME/.claude/projects/$d/$(cat ../cs).jsonl'
+# Obligations: a waits on the root's answer; the operator waits on the root.
+env NESS_SESSION=$A
+exec ness send --to manager --body 'need a decision' --intent decision
+env NESS_SESSION=
+exec ness send --to $R --body 'from the operator'
+store heartbeat 12 0.1.0
+exec ness status
+stdout '^s-[0-9a-f]{12}\tprog\tstandard full\tready\tctx 120k\tidle 5m\twaits 2 \(s-[0-9a-f]{12}, operator\)$'
+stdout '^  s-[0-9a-f]{12}\ta\teconomy\tready\tctx -\tidle -\twaits 0\ton item m-[a-z2-7]{8}'
+stdout '^  s-[0-9a-f]{12}\tb\tstandard\tready\tctx -\tidle -\twaits 0$'
+stdout '^probes: none \(feature off\)$'
+stdout '^worker: 0\.1\.0 heartbeat 12s$'
+# A session parked until a time shows it (UTC, month-day hour:minute); JSON carries the stamp.
+env NESS_SESSION=$B
+exec ness inbox --boundary 'release window' --until 2026-10-09T18:00
+env NESS_SESSION=
+exec ness status
+stdout '^  s-[0-9a-f]{12}\tb\tstandard\tready\tctx -\tidle -\twaits 0\ton parked until 10-09 18:00$'
+exec ness status --json
+stdout '"kind": "parked"'
+stdout '"note": "release window"'
+stdout '"until": "2026-10-09T18:00:00Z"'
+# A stalled launch.
+store phase $B waiting-ready
+store set-ready $B false
+env NESS_TEST_NOW=2026-10-08T10:02:00Z
+exec ness status
+stdout '\tb\tstandard\tstalled launch\t'
+# Closed sessions leave the default view and come back with --all.
+store close-session $B
+exec ness status
+! stdout '\tb\t'
+exec ness status --all
+stdout '\tb\tstandard\tclosed\t'
+# A heartbeat past the cutoff reads as not running in text, as in JSON.
+stdout '^worker: not running \(last beat 132s ago\)$'
+# JSON carries the same fields.
+exec ness status --json
+stdout '"schema": 1'
+stdout '"scope": "prog"'
+stdout '"tier": "standard"'
+stdout '"phase": "ready"'
+stdout '"context_tokens": 120000'
+stdout '"idle_minutes": 7'
+stdout '"from": "operator"'
+stdout '"heartbeat_age_seconds": 132'
+stdout '"version": "0.1.0"'
+# Outside a project status refuses.
+cd $WORK
+exits 4 ness status
+
+-- b.md --
+b

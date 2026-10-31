@@ -1,0 +1,89 @@
+# A profile check for the open event runs when a child is opened, before anything is written: a
+# failing run check refuses (exit 4) with its message, its detail and the skill pointer on stderr,
+# and leaves no session row, worktree, branch or tab; a passing check lets the open proceed;
+# --resume does not rerun it; checks for other events never run; the operator's `open --root`
+# opens a root and so skips for = "child" checks.
+# covers: R-CHK-001, R-CHK-002, R-CHK-003, R-CHK-004, R-CHK-006, R-CHK-009, R-CHK-010
+cd repo
+exec ness init --gate true --base main --yes
+cp ../ness.toml .ness/ness.toml
+mkdir .ness/profiles/local
+cp ../profile.toml .ness/profiles/local/profile.toml
+exec ness sync
+exec git add -A
+exec git commit -q -m 'ness init'
+
+# The operator opens a root: for = "child" checks are skipped, so the failing one does not run.
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+! exists $WORK/open.log
+
+# A child is refused while the check fails; nothing at all was written.
+env NESS_SESSION=$R
+snap before
+exits 4 ness open --scope c --tier standard --brief ../b.md
+stderr 'ness open refused: Create the allow file\. \(skill ness-entry, section Communicate\)$'
+stderr '^  local/needs-allow: no allow file$'
+store sessions 1
+fake herdr tabs 1
+fake herdr prompted 1
+exec git worktree list
+stdout -count=1 'worktrees/'
+exec git branch --list 'session/c-*'
+! stdout .
+samesnap before
+grep '^open c s-[0-9a-f]{12}$' $WORK/open.log
+
+# A check for another event never runs: its command would refuse, and its log stays absent.
+! exists $WORK/other.log
+
+# The check passes: the child opens.
+exec touch $WORK/allow
+exec ness open --scope c --tier standard --brief ../b.md
+stdout '^opened s-[0-9a-f]{12} scope c '
+store sessions 2
+store last-session C
+
+# --resume does not rerun the check, even though it would fail again.
+exec rm $WORK/allow
+exec sh -c 'wc -l < $WORK/open.log'
+cp stdout ../lines-before
+fake herdr exit p-c
+exec ness open --resume $C
+stdout '^resumed s-[0-9a-f]{12} run 2 '
+exec sh -c 'wc -l < $WORK/open.log'
+cmp stdout ../lines-before
+
+-- ness.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"
+profiles = ["local"]
+-- profile.toml --
+name = "local"
+
+[[checks]]
+id      = "needs-allow"
+on      = "open"
+for     = "child"
+skill   = "ness-entry"
+section = "Communicate"
+message = "Create the allow file."
+run     = 'echo "$NESS_EVENT $NESS_SCOPE $NESS_SESSION" >> "$WORK/open.log"; test -e "$WORK/allow" || { echo "no allow file"; exit 3; }'
+
+[[checks]]
+id      = "integrate-only"
+on      = "integrate"
+skill   = "ness-entry"
+section = "Communicate"
+run     = 'echo ran >> "$WORK/other.log"; exit 3'
+
+[[checks]]
+id      = "close-only"
+on      = "close"
+skill   = "ness-entry"
+section = "Communicate"
+run     = 'echo ran >> "$WORK/other.log"; exit 3'
+-- b.md --
+b

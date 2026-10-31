@@ -1,0 +1,17 @@
+# ness inbox --boundary NOTE records a pending boundary for the session and still lists.
+# covers: R-MSG-034
+cd repo
+exec ness init --gate true --base main --yes
+store add-session s-aaaaaaaaaaaa root
+store add-session s-bbbbbbbbbbbb child-b s-aaaaaaaaaaaa
+env NESS_SESSION=s-bbbbbbbbbbbb
+exec ness send --to manager --body hello
+# Another session's inbox run leaves the manager's items unpulled.
+exec ness inbox
+store pulled s-aaaaaaaaaaaa 0
+env NESS_SESSION=s-aaaaaaaaaaaa
+store session s-aaaaaaaaaaaa boundary=
+exec ness inbox --boundary 'plan written to docs/plan.md'
+stdout '\trequest\t'
+store session s-aaaaaaaaaaaa 'boundary=plan written to docs/plan.md'
+exits 2 ness inbox --boundary x --show m-nope

@@ -1,0 +1,10 @@
+name = "beta"
+
+[[checks]]
+id = "b1"
+on = "open"
+skill = "ness-entry"
+section = "Communicate"
+message = "first"
+kind = "checkpoint-since-landing"
+

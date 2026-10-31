@@ -1,0 +1,61 @@
+# Closing a child settles what it sent its manager: every open item (a deferred one too) is
+# disposed accepted with the answer "closed with the child", no reply item is created, and the
+# manager owes nothing for the child it closed. Closing a root leaves what it sent the operator
+# open: the operator's queue is not a manager's inbox.
+# covers: R-SESS-123
+cd repo
+exec ness init --gate true --base main --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+exec sh -c 'cd .worktrees/r-* && NESS_SESSION=$R ness open --scope c --tier standard --brief ../../../b.md'
+store last-session C
+exec sh -c 'cd .worktrees/c-* && printf "## Lessons\nNone.\n" > docs/sessions/r/c/report.md && git add -A && git commit -q -m report && NESS_SESSION=$C ness integrate --subject "feat: x"'
+env NESS_SESSION=$C
+exec ness send --to manager --body @../h.md --intent handoff
+store last $R HAND
+exec ness send --to manager --body 'which way' --intent decision
+store last $R DEC
+exec ness send --to manager --body 'for your information' --intent fyi
+store last $R FYI
+exec ness send --to manager --body 'please look' --intent request
+store last $R REQ
+exec ness send --to manager --body 'later' --intent request
+store last $R LATER
+# The manager defers one: still open, still an obligation.
+env NESS_SESSION=$R
+exec ness reply $LATER --body 'not now' --as deferred
+store item $LATER disposition=deferred
+exec ness close $C --note ok
+store session $C closed=true
+# All five are settled, none replied to, and the manager's inbox is empty.
+store item $HAND disposition=accepted 'answer=closed with the child'
+store item $DEC disposition=accepted 'answer=closed with the child'
+store item $FYI disposition=accepted 'answer=closed with the child'
+store item $REQ disposition=accepted 'answer=closed with the child'
+store item $LATER disposition=accepted 'answer=closed with the child'
+store items $C 0
+store items operator 0
+exec ness inbox
+! stdout 'handoff|decision|fyi|request'
+# The root's own close owes nothing for them: report, integration, then the operator closes it.
+# What the root sent the operator is not settled.
+exec ness send --to operator --body 'status for you' --intent request
+store last operator OP
+exec sh -c 'cd .worktrees/r-* && printf "## Lessons\nNone.\n" > docs/sessions/r/report.md && git add -A && git commit -q -m report && NESS_SESSION=$R ness integrate --subject "feat: x"'
+env NESS_SESSION=
+exec ness close $R --note 'program done'
+store session $R closed=true
+store item $OP disposition=
+store items operator 1
+
+-- b.md --
+b
+-- h.md --
+## Done
+x
+## Now
+y
+## Next
+z

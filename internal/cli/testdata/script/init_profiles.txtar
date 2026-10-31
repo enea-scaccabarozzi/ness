@@ -1,0 +1,20 @@
+# --profile is repeatable and recorded in the order given.
+# covers: R-CFG-022
+cd repo
+exec ness init --gate true --base main --profile b --profile a --yes
+grep '^profiles = \["b", "a"\]$' .ness/ness.toml
+exists docs/a.md
+exists docs/b.md
+
+-- repo/.ness/profiles/a/profile.toml --
+name = "a"
+[files]
+"docs/a.md" = { own = "a.md" }
+-- repo/.ness/profiles/a/a.md --
+a
+-- repo/.ness/profiles/b/profile.toml --
+name = "b"
+[files]
+"docs/b.md" = { own = "b.md" }
+-- repo/.ness/profiles/b/b.md --
+b

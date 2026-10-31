@@ -1,0 +1,59 @@
+# Rule 3 updates untouched files; rule 4 never overwrites a user's edit; --keep settles a
+# conflict until upstream changes again.
+# covers: R-SYNC-013, R-SYNC-014, R-SYNC-015, R-SYNC-017, R-SYNC-018, R-PROF-003
+cd repo
+exec ness sync
+cmp docs/x.md ../x1.md
+cp ../x2.md .ness/profiles/local/x.md
+exec ness sync
+stdout '^update docs/x.md$'
+cmp docs/x.md ../x2.md
+# The user edits; upstream unchanged: left alone.
+cp ../mine.md docs/x.md
+exec ness sync
+! stdout .
+cmp docs/x.md ../mine.md
+# Upstream changes too: conflict, the user's bytes stay.
+cp ../x3.md .ness/profiles/local/x.md
+exits 3 ness sync
+stdout '^conflict docs/x.md'
+cmp docs/x.md ../mine.md
+cmp docs/x.md.ness-new ../x3.md
+# --keep on a clean path is refused and changes nothing.
+cp .ness/lock.json ../lock.before
+exits 4 ness sync --keep docs/other.md
+stderr 'not in conflict'
+cmp .ness/lock.json ../lock.before
+# A path spelled with ./ names the same file.
+exec ness sync --keep ./docs/x.md
+! exists docs/x.md.ness-new
+exec ness sync
+! stdout .
+cmp docs/x.md ../mine.md
+cp ../x2.md .ness/profiles/local/x.md
+exits 3 ness sync
+exists docs/x.md.ness-new
+
+-- repo/.ness/ness.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"
+profiles = ["local"]
+-- repo/.ness/profiles/local/profile.toml --
+name = "local"
+[files]
+"docs/x.md" = { own = "x.md" }
+"docs/other.md" = { own = "other.md" }
+-- repo/.ness/profiles/local/x.md --
+one
+-- repo/.ness/profiles/local/other.md --
+other
+-- x1.md --
+one
+-- x2.md --
+two
+-- x3.md --
+three
+-- mine.md --
+mine

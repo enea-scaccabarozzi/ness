@@ -1,0 +1,64 @@
+# ness send: every flag value, @FILE bodies, the permanent idempotency key, one line of output
+# without the body, and the removed --request-key flag. An empty or unreadable body is a usage
+# error that creates nothing (Review Focus 1).
+# covers: R-MSG-010, R-MSG-014, R-MSG-015, R-MSG-016, R-MSG-019, R-MSG-049, R-NTF-006
+cd repo
+exec ness init --gate true --base main --yes
+store add-session s-aaaaaaaaaaaa root
+store add-session s-bbbbbbbbbbbb child-b s-aaaaaaaaaaaa
+env NESS_SESSION=s-bbbbbbbbbbbb
+exec ness send --to manager --body 'need a decision on the API'
+stdout '^sent m-[a-z2-7]{8} to s-aaaaaaaaaaaa$'
+! stdout 'decision on the API'
+! stderr .
+store items s-aaaaaaaaaaaa 1
+# The same content again is the same item.
+exec ness send --to manager --body 'need a decision on the API'
+stdout '^already sent m-[a-z2-7]{8}$'
+! stdout 'decision on the API'
+! stderr .
+store items s-aaaaaaaaaaaa 1
+# Different content is a second item.
+exec ness send --to manager --body 'second body'
+stdout '^sent m-'
+store items s-aaaaaaaaaaaa 2
+# Every intent and --urgent are accepted; reply and anything else are usage errors.
+exec ness send --to manager --body fyi-body --intent fyi
+exec ness send --to manager --body decision-body --intent decision
+exec ness send --to manager --body @../h.md --intent handoff
+exec ness send --to manager --body urgent-body --urgent
+store items s-aaaaaaaaaaaa 6
+exits 2 ness send --to manager --body x --intent reply
+stderr 'accepted values are request, fyi, decision, handoff, checkpoint'
+exits 2 ness send --to manager --body x --intent question
+store items s-aaaaaaaaaaaa 6
+# @FILE reads the body from the file; a missing file, an empty body or a missing flag is a
+# usage error.
+exec ness send --to manager --body @../body.txt
+stdout '^sent m-'
+store items s-aaaaaaaaaaaa 7
+exits 2 ness send --to manager --body @../nope.txt
+exits 2 ness send --to manager --body @
+exits 2 ness send --to manager --body ''
+stderr 'empty'
+exits 2 ness send --body x
+stderr '--to'
+exits 2 ness send --to manager
+stderr '--body'
+store items s-aaaaaaaaaaaa 7
+# The cut flag does not exist.
+exits 2 ness send --to manager --body x --request-key k
+stderr 'unknown flag'
+# send never posts to a channel (R-NTF-006).
+fake http requests 0
+
+-- body.txt --
+line one
+	line two with a tab
+-- h.md --
+## Done
+x
+## Now
+y
+## Next
+z

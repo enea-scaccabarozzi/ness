@@ -1,0 +1,22 @@
+# a CHANGELOG version without a Running sessions section refuses the upgrade before any file
+# or the lock changes (R-SYNC-089).
+# covers: R-SYNC-089
+cd repo
+env NESS_TEST_NOTES=$WORK/notes.md
+env NESS_TEST_VERSION=0.3.0
+exec ness init --gate true --base main --yes
+cp .ness/lock.json ../lock.before
+env NESS_TEST_VERSION=0.3.2
+! exec ness sync
+stderr 'Running sessions'
+cmp .ness/lock.json ../lock.before
+grep '"ness": "0.3.0"' .ness/lock.json
+
+-- notes.md --
+# Changelog
+
+## [0.3.2] (2026-10-20)
+
+### Features
+
+* stats

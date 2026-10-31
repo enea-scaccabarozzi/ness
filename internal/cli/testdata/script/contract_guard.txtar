@@ -1,0 +1,113 @@
+# With contracts on, pre-tool refuses Edit, Write and MultiEdit (Claude Code) and apply_patch
+# (Codex) on a frozen file, naming the file and ness contract amend; it allows unfrozen files
+# and amended ones; it resolves the repository from the edited file's own worktree even when
+# CLAUDE_PROJECT_DIR names the primary checkout; it never inspects Bash, so a sed -i passes the
+# hook and fails contract check. With contracts off the same edit passes.
+# covers: R-HOOK-010, R-CTR-009, R-CTR-010, R-CTR-011, R-CTR-021
+cd repo
+exec ness init --gate true --base main --yes
+exec sh -c 'printf "Feature: a\n" > a.txt; printf "free\n" > free.txt'
+exec git add -A
+exec git commit -q -m 'ness init'
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+exec ness send --to $R --body 'approve a.txt'
+store last $R IR
+env NESS_SESSION=$R
+# Off: nothing is guarded.
+stdin ../edit.json
+exec sh -c 'cd .worktrees/r-* && ness hook pre-tool'
+! stderr .
+# On, frozen in the session's lock.
+exec sh -c 'printf "features = [\"contracts\"]\n" >> .ness/ness.toml && git add -A && git commit -q -m on'
+exec sh -c 'cd .worktrees/r-* && git merge -q main && ness contract freeze a.txt'
+env CLAUDE_PROJECT_DIR=$WORK/repo
+stdin ../edit.json
+exits 2 sh -c 'cd .worktrees/r-* && ness hook pre-tool'
+stderr 'a\.txt is frozen \(docs/sessions/r/contract\.lock\); ask your manager .*ness contract amend a\.txt .*--item'
+stderr 'skill ness-[a-z-]+, section [A-Z]'
+stdin ../write.json
+exits 2 sh -c 'cd .worktrees/r-* && ness hook pre-tool'
+stderr 'ness contract amend a\.txt'
+stdin ../multi.json
+exits 2 sh -c 'cd .worktrees/r-* && ness hook pre-tool'
+stderr 'ness contract amend a\.txt'
+stdin ../patch.json
+exits 2 sh -c 'cd .worktrees/r-* && ness hook pre-tool'
+stderr 'ness contract amend a\.txt'
+# The payload's cwd is the worktree: an absolute path into it is caught from the primary too.
+exec sh -c 'cd .worktrees/r-* && printf "{\"tool_name\":\"Edit\",\"cwd\":\"$(pwd)\",\"tool_input\":{\"file_path\":\"$(pwd)/a.txt\"}}" > ../../../abs.json'
+stdin ../abs.json
+exits 2 ness hook pre-tool
+stderr 'ness contract amend a\.txt'
+# A relative path resolves against the payload's cwd, not the hook's own.
+exec sh -c 'cd .worktrees/r-* && printf "{\"tool_name\":\"Edit\",\"cwd\":\"$(pwd)\",\"tool_input\":{\"file_path\":\"a.txt\"}}" > ../../../rel.json'
+stdin ../rel.json
+exits 2 ness hook pre-tool
+stderr 'ness contract amend a\.txt'
+# Unfrozen: silent. Bash: never inspected, caught by check.
+stdin ../free.json
+exec sh -c 'cd .worktrees/r-* && ness hook pre-tool'
+! stdout .
+! stderr .
+stdin ../bash.json
+exec sh -c 'cd .worktrees/r-* && ness hook pre-tool'
+! stderr .
+exec sh -c 'cd .worktrees/r-* && sed -i "s/a/A/" a.txt'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stdout 'differs\ta\.txt'
+exec sh -c 'cd .worktrees/r-* && git checkout -- a.txt'
+# Amended: allowed again until re-frozen.
+exec sh -c 'cd .worktrees/r-* && ness contract amend a.txt --reason "fix" --item $IR'
+stdin ../edit.json
+exec sh -c 'cd .worktrees/r-* && ness hook pre-tool'
+! stderr .
+exec sh -c 'cd .worktrees/r-* && ness contract freeze a.txt'
+stdin ../edit.json
+exits 2 sh -c 'cd .worktrees/r-* && ness hook pre-tool'
+# Every path a patch touches counts: a move onto, an add over, a move away from a frozen file.
+stdin ../moveonto.json
+exits 2 sh -c 'cd .worktrees/r-* && ness hook pre-tool'
+stderr 'ness contract amend a\.txt'
+stdin ../addover.json
+exits 2 sh -c 'cd .worktrees/r-* && ness hook pre-tool'
+stderr 'ness contract amend a\.txt'
+stdin ../moveaway.json
+exits 2 sh -c 'cd .worktrees/r-* && ness hook pre-tool'
+stderr 'ness contract amend a\.txt'
+stdin ../addnew.json
+exec sh -c 'cd .worktrees/r-* && ness hook pre-tool'
+! stderr .
+# Contracts turned off on the branch alone changes nothing (R-CTR-046); turned off at the base and
+# merged, the frozen file is no longer guarded.
+exec sh -c 'cd .worktrees/r-* && sed -i "/^features/d" .ness/ness.toml'
+stdin ../edit.json
+exits 2 sh -c 'cd .worktrees/r-* && ness hook pre-tool'
+exec sh -c 'cd .worktrees/r-* && git checkout -- .ness/ness.toml'
+exec sh -c 'sed -i "/^features/d" .ness/ness.toml && git commit -q -am off && cd .worktrees/r-* && git merge -q main'
+stdin ../edit.json
+exec sh -c 'cd .worktrees/r-* && ness hook pre-tool'
+! stderr .
+
+-- b.md --
+b
+-- edit.json --
+{"tool_name":"Edit","tool_input":{"file_path":"a.txt","old_string":"a","new_string":"b"}}
+-- write.json --
+{"tool_name":"Write","tool_input":{"file_path":"a.txt","content":"x"}}
+-- multi.json --
+{"tool_name":"MultiEdit","tool_input":{"file_path":"a.txt","edits":[{"old_string":"a","new_string":"b"}]}}
+-- patch.json --
+{"tool_name":"apply_patch","tool_input":{"input":"*** Begin Patch\n*** Update File: a.txt\n@@\n-a\n+b\n*** End Patch"}}
+-- moveonto.json --
+{"tool_name":"apply_patch","tool_input":{"input":"*** Begin Patch\n*** Update File: free.txt\n*** Move to: a.txt\n@@\n-free\n+x\n*** End Patch"}}
+-- addover.json --
+{"tool_name":"apply_patch","tool_input":{"input":"*** Begin Patch\n*** Add File: a.txt\n+x\n*** End Patch"}}
+-- moveaway.json --
+{"tool_name":"apply_patch","tool_input":{"input":"*** Begin Patch\n*** Update File: a.txt\n*** Move to: z.feature\n@@\n-a\n+b\n*** End Patch"}}
+-- addnew.json --
+{"tool_name":"apply_patch","tool_input":{"input":"*** Begin Patch\n*** Add File: brand-new.txt\n+x\n*** End Patch"}}
+-- free.json --
+{"tool_name":"Edit","tool_input":{"file_path":"free.txt","old_string":"free","new_string":"x"}}
+-- bash.json --
+{"tool_name":"Bash","tool_input":{"command":"sed -i s/a/A/ a.txt"}}

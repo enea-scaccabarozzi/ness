@@ -1,0 +1,78 @@
+# The project-wide locks are read from the merge-base, not from the branch: a session lock entry
+# (even a hand-written "amend") never hides a project-wide path, amend and freeze refuse one, a
+# branch that empties [contracts] frozen or turns the feature off is still checked against the
+# base's config, and a base that moved on after the fork does not fail a branch that never touched
+# it. Deleting or renaming a glob-frozen file out of its glob differs.
+# covers: R-CTR-040, R-CTR-041, R-CTR-045, R-CTR-046, R-CTR-056
+cd repo
+exec ness init --gate true --base main --yes
+exec sh -c 'printf "features = [\"contracts\"]\n[contracts]\nfrozen = [\"features/*.feature\", \"steps.go\"]\n" >> .ness/ness.toml'
+exec sh -c 'mkdir -p features && cp ../pay.feature features/pay.feature && printf "step\n" > steps.go'
+exec git add -A
+exec git commit -q -m 'ness init'
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+env NESS_SESSION=$R
+# The base moves on after the fork: an edited scenario and a new feature there do not fail a branch
+# that never touched them (the merge-base is the reference, not the base tip).
+exec sh -c 'sed -i "s/Then it works/Then it still works/" features/pay.feature && cp ../new.feature features/base.feature && git add -A && git commit -q -m "base moves on"'
+exec sh -c 'cd .worktrees/r-* && ness contract check'
+stdout '^ok\t2 frozen files$'
+# Deleting a glob-frozen file, or renaming it out of the glob, differs.
+exec sh -c 'cd .worktrees/r-* && rm features/pay.feature'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stdout '^differs\tfeatures/pay\.feature\t'
+exec sh -c 'cd .worktrees/r-* && git checkout -- features/pay.feature && mkdir other && git mv features/pay.feature other/pay.feature'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stdout '^differs\tfeatures/pay\.feature\t'
+exec sh -c 'cd .worktrees/r-* && git mv other/pay.feature features/pay.feature'
+# A hand-written "amend" in a session lock does not open a project-wide path.
+exec sh -c 'cd .worktrees/r-* && sed -i "s/Then it works/Then it fails/" features/pay.feature'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+exec sh -c 'cd .worktrees/r-* && mkdir -p docs/sessions/x && printf "amend features/pay.feature\n" > docs/sessions/x/contract.lock'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stdout '^differs\tfeatures/pay\.feature\t\.ness/ness\.toml\tscenario "pays" edited$'
+exec sh -c 'cd .worktrees/r-* && rm -r docs/sessions/x && git checkout -- features/pay.feature'
+# amend without the operator's words and freeze refuse a project-wide path.
+exits 4 sh -c 'cd .worktrees/r-* && ness contract amend steps.go --reason x'
+stderr 'frozen project-wide'
+exits 4 sh -c 'cd .worktrees/r-* && ness contract freeze steps.go'
+stderr 'frozen project-wide'
+# The branch's own ness.toml does not weaken the lock: an emptied list, or the feature off.
+exec sh -c 'cd .worktrees/r-* && sed -i "s/^frozen = .*/frozen = []/" .ness/ness.toml && printf "more\n" >> steps.go'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stdout '^differs\tsteps\.go\t'
+exec sh -c 'cd .worktrees/r-* && sed -i "s/^features = .*/features = []/" .ness/ness.toml'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stdout '^differs\tsteps\.go\t'
+# A base the merge-base's config does not name is refused, not followed.
+exec sh -c 'cd .worktrees/r-* && git checkout -- .ness/ness.toml && sed -i "s/^base = .*/base = \"HEAD\"/" .ness/ness.toml'
+exits 4 sh -c 'cd .worktrees/r-* && ness contract check'
+stderr 'base is "HEAD" here but "main"'
+# The hook decides a literal .feature like check does: soft when it exists at base.
+exec sh -c 'cd .worktrees/r-* && git checkout -- .ness/ness.toml steps.go'
+stdin ../edit-feature.json
+exec sh -c 'cd .worktrees/r-* && ness hook pre-tool'
+stdout 'features/pay\.feature is locked project-wide'
+# The operator amends a project-wide path in a session's worktree without words; in a checkout
+# that is no session's it is told to change it on the base directly.
+env NESS_SESSION=
+exits 4 ness contract amend steps.go --reason x
+stderr 'amend it on main directly'
+exec sh -c 'cd .worktrees/r-* && printf "more\n" >> steps.go && ness contract amend steps.go --reason "operator says" && ness contract check'
+stdout '^ok\t'
+exec sh -c 'grep -c "^Amend steps.go (project-wide): operator says \[operator\] (" .worktrees/r-*/docs/sessions/r/decisions.md'
+stdout '^1$'
+-- b.md --
+brief
+-- pay.feature --
+Feature: pay
+  Scenario: pays
+    When they pay
+    Then it works
+-- new.feature --
+Feature: base
+  Scenario: fresh
+    Given x
+-- edit-feature.json --
+{"tool_name":"Edit","tool_input":{"file_path":"features/pay.feature"}}

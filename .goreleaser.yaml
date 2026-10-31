@@ -1,0 +1,28 @@
+# ness releases: static Linux binaries (R-QA-004). release-please cuts the tag and the GitHub
+# release; the release workflow runs goreleaser on the tag and attaches the archives.
+version: 2
+project_name: ness
+builds:
+  - id: ness
+    main: ./cmd/ness
+    binary: ness
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+archives:
+  - formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+checksum:
+  name_template: checksums.txt
+changelog:
+  disable: true
+release:
+  mode: keep-existing

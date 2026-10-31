@@ -1,0 +1,50 @@
+# A launch opens its tab in its manager's herdr workspace, a root in the workspace of the process
+# that runs ness open (HERDR_WORKSPACE_ID), and --resume keeps to the same rule. The fake herdr
+# names a tab's ids after the workspace it was created in, so the manager's tab id is the proof.
+# covers: R-SESS-030
+cd repo
+exec ness init --gate true --base main --yes
+cp ../ness.toml .ness/ness.toml
+exec git add -A
+exec git commit -q -m 'ness init'
+# Without HERDR_WORKSPACE_ID, herdr puts the tab where it likes (the fake: wF).
+exec ness open --root --scope plain --tier standard --brief ../brief.md
+fake herdr workspace wF
+# A root opened from workspace w7.
+env HERDR_WORKSPACE_ID=w7
+exec ness open --root --scope prog --tier standard --brief ../brief.md
+fake herdr workspace w7
+store last-session ROOT
+store get $ROOT tab ROOTTAB
+exec sh -c 'test "$ROOTTAB" = w7:t2'
+# Another root, from workspace w9.
+env HERDR_WORKSPACE_ID=w9
+exec ness open --root --scope other --tier standard --brief ../brief.md
+fake herdr workspace w9
+# A child opened from a process in workspace w3 lands beside its manager, in w7.
+env HERDR_WORKSPACE_ID=w3
+exec sh -c 'cd .worktrees/prog-* && NESS_SESSION=$ROOT ness open --scope kid --tier standard --title Kid --brief ../../../brief.md'
+fake herdr workspace w7
+fake herdr tab Kid
+store last-session KID
+# --resume of a stalled child whose tab was lost opens the new tab in the manager's workspace too.
+env HERDR_WORKSPACE_ID=
+fake herdr ready-on-start false
+exec sh -c 'cd .worktrees/prog-* && NESS_SESSION=$ROOT ness open --scope lost --tier standard --brief ../../../brief.md || true'
+store last-session LOST
+fake herdr close-tab lost
+fake herdr ready-on-start true
+exec ness open --resume $LOST
+stdout '^resumed s-[0-9a-f]{12} run 2'
+fake herdr tab lost
+fake herdr workspace w7
+
+-- ness.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"
+[launch]
+ready_timeout = "300ms"
+-- brief.md --
+Do the thing.

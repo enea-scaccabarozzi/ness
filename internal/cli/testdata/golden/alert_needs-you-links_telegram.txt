@@ -1,0 +1,9 @@
+🟠 <b>Needs you</b> · example-lab
+<b><a href="https://claude.ai/code/session_01AbC">weekly-review-plan</a></b>
+
+Which band?
+
+• low, see <a href="https://example.com/bands?q=1">🔗 example.com</a>.
+• high, as in <a href="https://claude.ai/artifact/B2">📄 page</a>
+
+<a href="https://claude.ai/artifact/P1">📄 Open the page</a>

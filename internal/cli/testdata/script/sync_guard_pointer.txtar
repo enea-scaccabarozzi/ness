@@ -1,0 +1,43 @@
+# A [[guards]] entry whose (skill, section) pointer does not resolve in the rendered skills
+# refuses sync and sync --check, naming the guard and the headings that exist; nothing is written.
+# covers: R-PROF-046
+cd repo
+snap before
+exits 4 ness sync
+stderr 'guards\[0\]'
+stderr 'No such section'
+stderr 'Communicate'
+samesnap before
+exits 4 ness sync --check
+stderr 'guards\[0\]'
+samesnap before
+
+# Pointing at a heading that exists passes.
+cp ../fixed.toml .ness/ness.toml
+ness sync
+ness sync --check
+
+-- repo/.ness/ness.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"
+
+[[guards]]
+tool    = "Bash"
+match   = '^pytest\s*$'
+message = "Run the one test you changed."
+skill   = "ness-entry"
+section = "No such section"
+-- fixed.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"
+
+[[guards]]
+tool    = "Bash"
+match   = '^pytest\s*$'
+message = "Run the one test you changed."
+skill   = "ness-entry"
+section = "Communicate"

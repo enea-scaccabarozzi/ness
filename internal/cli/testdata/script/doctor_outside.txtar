@@ -1,0 +1,26 @@
+# Outside a project doctor prints the version line, then refuses; a malformed ness.toml is a
+# refusal naming the file, not a crash.
+# covers: R-DOC-023, R-CFG-003
+exits 4 ness doctor
+stdout '^ness 0\.1\.0 at /'
+stderr 'not inside a git repository'
+cd repo
+exits 4 ness doctor
+stdout '^ness 0\.1\.0 at '
+stderr 'run ness init'
+exec ness init --gate true --base main --yes
+cp ../broken.toml .ness/ness.toml
+exits 4 ness doctor
+stdout '^ness 0\.1\.0 at '
+stderr '\.ness/ness\.toml:2:'
+cp ../nogate.toml .ness/ness.toml
+exits 4 ness doctor
+stderr 'gate is required'
+
+-- broken.toml --
+ness = "0.1"
+project = = "x"
+-- nogate.toml --
+ness = "0.1"
+project = "repo"
+base = "main"

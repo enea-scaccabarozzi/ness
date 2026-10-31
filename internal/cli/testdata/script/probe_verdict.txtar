@@ -1,0 +1,108 @@
+# verdict answers a wake, records the verdict and posts it when the probe is judged; --probe-bug
+# records a defect, posts nothing and flags needs-edit until the file changes; an item that is
+# not a probe wake, a state other than green|red, and a second verdict on the same wake are
+# refused; nothing posts twice; the final wake of a probe whose window ended is answered the same
+# way; ness reply refuses a wake.
+# covers: R-PRB-064, R-PRB-065, R-PRB-066, R-PRB-082, R-PRB-052, R-PRB-042, R-CFG-030, R-MSG-062
+cd repo
+exec ness init --gate true --base main --yes
+exec sh -c 'cat ../features.toml >> .ness/ness.toml'
+exec git add -A
+exec git commit -q -m 'ness init'
+env NESS_TEST_NOW=2026-10-09T10:00:00Z
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+exec sh -c 'cd .worktrees/r-* && mkdir -p probes && cp ../../../judged.md ../../../windowed.md probes/'
+env NESS_SESSION=$R
+exec sh -c 'cd .worktrees/r-* && ness probe start probes/judged.md'
+exec ness worker run --once
+store items $R 1
+store last $R W
+store probe-id probes/judged.md $R P
+store item $W probe=$P
+# A plain request is not a probe wake.
+env NESS_SESSION=
+exec ness send --to $R --body 'not a wake'
+env NESS_SESSION=$R
+store last $R N
+exits 4 ness probe verdict $N --state green --note x
+stderr 'not a probe wake'
+# ness reply refuses a wake and names the verdict command.
+exits 4 ness reply $W --body x
+stderr 'ness probe verdict'
+# Its owner sent it, but a wake is not withdrawn either (R-MSG-062).
+exits 4 ness reply $W --body x --as withdrawn
+stderr 'ness probe verdict'
+# --state accepts green and red only; the note is required.
+exits 2 ness probe verdict $W --state unclear --note x
+stderr 'accepted values are green, red'
+exits 2 ness probe verdict $W --state green
+stderr 'note is required'
+# A judged verdict posts once; the item is disposed; status shows the verdict.
+exec ness probe verdict $W --state green --note 'the dashboards agree'
+stdout '^verdict green recorded for probes/judged\.md$'
+stdout '^posted to log$'
+store item $W disposition=resolved
+store probe probes/judged.md $R verdict=green 'verdict_note=the dashboards agree' needs_edit=false
+exec sh -c 'cat posted'
+stdout '^probe probes/judged\.md verdict: GREEN$'
+stdout 'the dashboards agree'
+exec ness status
+stdout 'probes/judged\.md.*verdict green'
+# A second verdict on the same wake is refused and posts nothing.
+exits 4 ness probe verdict $W --state red --note again
+stderr 'already'
+exec sh -c 'grep -c verdict posted'
+stdout '^1$'
+# --probe-bug: recorded as a defect, nothing posted, needs-edit until the file changes.
+env NESS_TEST_NOW=2026-10-09T10:31:00Z
+exec ness worker run --once
+store items $R 2
+store last $R W2
+exec ness probe verdict $W2 --state red --note 'the floor counts the wrong table' --probe-bug
+stdout '^verdict red \(probe bug\) recorded'
+! stdout 'posted'
+exec sh -c 'grep -c verdict posted'
+stdout '^1$'
+store probe probes/judged.md $R needs_edit=true
+exec ness status
+stdout 'probes/judged\.md.*needs-edit'
+exec sh -c 'cd .worktrees/r-* && echo "# edited" >> probes/judged.md'
+exec ness status
+! stdout 'needs-edit'
+# The final wake of a probe whose window ended is answered and posted like any other.
+exec sh -c 'cd .worktrees/r-* && ness probe stop probes/judged.md --note done'
+exec sh -c 'cd .worktrees/r-* && ness probe start probes/windowed.md'
+store probe-id probes/windowed.md $R PW
+exec ness worker run --once
+env NESS_TEST_NOW=2026-10-09T11:05:00Z
+exec ness worker run --once
+store last $R WF
+store item $WF probe=$PW
+exec ness probe verdict $WF --state green --note 'window held'
+stdout '^posted to log$'
+exec sh -c 'cat posted'
+stdout 'probe probes/windowed\.md verdict: GREEN'
+
+-- features.toml --
+features = ["probes", "notify"]
+[notify.channels.log]
+kind = "command"
+command = "cat >> posted"
+-- b.md --
+b
+-- judged.md --
+---
+every: 30m
+notify: judged
+channel: log
+---
+judge the dashboards
+-- windowed.md --
+---
+every: 10m
+window: 30m
+notify: judged
+channel: log
+---
+judge the window

@@ -1,0 +1,62 @@
+# check trusts no lock content the branch wrote without a logged decision: a frozen file whose
+# blob differs from its reference sha (the merge-base lock's, or the commit that first froze it)
+# needs an "Amend <path>:" line added on the branch to the lock's decisions.md. A Bash re-sha of
+# the lock or a Bash-written amend line is caught; ness contract amend then freeze passes.
+# covers: R-CTR-003, R-CTR-008, R-CTR-012, R-CTR-021
+cd repo
+exec ness init --gate true --base main --yes
+exec sh -c 'printf "features = [\"contracts\"]\n" >> .ness/ness.toml'
+exec sh -c 'printf "{}\n" > a.json; printf "{}\n" > b.json'
+exec git add -A
+exec git commit -q -m 'ness init'
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+exec ness send --to $R --body 'approve a.json'
+store last $R IR
+env NESS_SESSION=$R
+# a.json is frozen at the merge-base: main merges the freeze.
+exec sh -c 'cd .worktrees/r-* && ness contract freeze a.json && git add -A && git commit -q -m freeze'
+exec sh -c 'git merge -q $(cd .worktrees/r-* && git rev-parse HEAD)'
+exec sh -c 'cd .worktrees/r-* && ness contract check'
+stdout '^ok\t1 frozen files$'
+# The attack: edit the frozen file, re-sha the lock from Bash, commit.
+exec sh -c 'cd .worktrees/r-* && echo changed > a.json && sed -i "s/^[0-9a-f]* a.json$/$(git hash-object a.json) a.json/" docs/sessions/r/contract.lock && git commit -qam resha'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stdout '^changed\ta\.json\tdocs/sessions/r/contract\.lock'
+exec sh -c 'cd .worktrees/r-* && git reset -q --hard HEAD~1'
+# The same, uncommitted.
+exec sh -c 'cd .worktrees/r-* && echo changed > a.json && sed -i "s/^[0-9a-f]* a.json$/$(git hash-object a.json) a.json/" docs/sessions/r/contract.lock'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stdout '^changed\ta\.json\t'
+exec sh -c 'cd .worktrees/r-* && git checkout -- .'
+# A Bash-written amend line with no decision.
+exec sh -c 'cd .worktrees/r-* && echo changed > a.json && sed -i "s/^[0-9a-f]* a.json$/amend a.json/" docs/sessions/r/contract.lock'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stdout '^changed\ta\.json\t'
+exec sh -c 'cd .worktrees/r-* && git checkout -- .'
+# A path first frozen on the branch: the commit that first froze it is the reference.
+exec sh -c 'cd .worktrees/r-* && ness contract freeze b.json && git add -A && git commit -q -m freezeb'
+exec sh -c 'cd .worktrees/r-* && echo changed > b.json && sed -i "s/^[0-9a-f]* b.json$/$(git hash-object b.json) b.json/" docs/sessions/r/contract.lock && git commit -qam reshab'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stdout '^changed\tb\.json\t'
+! stdout 'a\.json'
+exec sh -c 'cd .worktrees/r-* && git reset -q --hard HEAD~1'
+# The legitimate flow: amend (the decision is logged), edit, check, freeze again, check.
+env NESS_TEST_NOW=2026-10-09T10:00:00Z
+exec sh -c 'cd .worktrees/r-* && ness contract amend a.json --reason "v2" --item $IR && echo changed > a.json && ness contract check'
+stdout '^ok\t'
+exec sh -c 'cd .worktrees/r-* && ness contract freeze a.json && git add -A && git commit -q -m amend && ness contract check'
+stdout '^ok\t2 frozen files$'
+# A decision already at the merge-base licenses nothing new on the next branch.
+exec sh -c 'git merge -q $(cd .worktrees/r-* && git rev-parse HEAD)'
+exec sh -c 'cd .worktrees/r-* && echo again > a.json && sed -i "s/^[0-9a-f]* a.json$/$(git hash-object a.json) a.json/" docs/sessions/r/contract.lock'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stdout '^changed\ta\.json\t'
+exec sh -c 'cd .worktrees/r-* && git checkout -- .'
+# freeze through a symlink records the real path, the one the guard compares (R-CTR-012).
+exec sh -c 'cd .worktrees/r-* && printf "c\n" > c.json && ln -s c.json link.json && ness contract freeze link.json'
+stdout '^frozen c\.json in '
+exec sh -c 'cd .worktrees/r-* && grep " c.json$" docs/sessions/r/contract.lock && ! grep link docs/sessions/r/contract.lock'
+
+-- b.md --
+b

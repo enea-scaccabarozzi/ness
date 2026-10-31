@@ -1,0 +1,50 @@
+# Root to root: a root addresses another root of its project, and each such send files one fyi
+# copy with the operator that never alerts; replies run between the two roots and a reply is
+# settled only by its recipient; children still stay inside their tree.
+# covers: R-MSG-073, R-MSG-050
+cd repo
+exec ness init --gate true --base main --yes
+store add-session s-aaaaaaaaaaaa root-a
+store add-session s-bbbbbbbbbbbb root-b
+store add-session s-cccccccccccc child-a s-aaaaaaaaaaaa
+# Root A asks root B; the operator gets one fyi copy with the header.
+env NESS_SESSION=s-aaaaaaaaaaaa
+exec ness send --to s-bbbbbbbbbbbb --body 'peer question'
+stdout '^sent m-[a-z2-7]{8} to s-bbbbbbbbbbbb$'
+store items s-bbbbbbbbbbbb 1
+store last s-bbbbbbbbbbbb ASK
+store items operator 1
+store last operator COPY
+store item $COPY intent=fyi sender=s-aaaaaaaaaaaa
+env NESS_SESSION=
+exec ness inbox --show $COPY
+stdout '^\[copy of '$ASK' from s-aaaaaaaaaaaa to s-bbbbbbbbbbbb\]$'
+stdout '^peer question$'
+# The repeat creates neither a second item nor a second copy.
+env NESS_SESSION=s-aaaaaaaaaaaa
+exec ness send --to s-bbbbbbbbbbbb --body 'peer question'
+stdout '^already sent '$ASK'$'
+store items s-bbbbbbbbbbbb 1
+store items operator 0
+# A root cannot address itself.
+exits 4 ness send --to s-aaaaaaaaaaaa --body 'to myself'
+store items s-aaaaaaaaaaaa 0
+# Root B replies; the reply reaches root A; only A settles it.
+env NESS_SESSION=s-bbbbbbbbbbbb
+exec ness reply $ASK --body 'peer answer'
+store items s-aaaaaaaaaaaa 1
+store last s-aaaaaaaaaaaa ANS
+store item $ANS intent=reply sender=s-bbbbbbbbbbbb
+exits 4 ness reply $ANS --body 'not mine'
+env NESS_SESSION=s-aaaaaaaaaaaa
+exec ness reply $ANS --body 'thanks'
+store item $ANS disposition=resolved
+store items s-bbbbbbbbbbbb 0
+# Children still cannot leave their tree, and a root cannot reach another root's child.
+env NESS_SESSION=s-cccccccccccc
+exits 4 ness send --to s-bbbbbbbbbbbb --body 'child to other root'
+stderr 'siblings talk through the manager'
+env NESS_SESSION=s-bbbbbbbbbbbb
+exits 4 ness send --to s-cccccccccccc --body 'root to other tree child'
+store items s-cccccccccccc 0
+store items s-bbbbbbbbbbbb 0

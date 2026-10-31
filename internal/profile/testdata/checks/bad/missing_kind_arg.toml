@@ -1,0 +1,12 @@
+# want: heading
+name = "local"
+
+[[checks]]
+id = "c1"
+on = "open"
+skill = "ness-entry"
+section = "Communicate"
+message = "fix it"
+kind = "section-matches"
+file = "docs/a.md"
+require = ["x"]

@@ -1,0 +1,16 @@
+name = "alpha"
+
+[[checks]]
+id = "a1"
+on = "open"
+skill = "ness-entry"
+section = "Communicate"
+message = "first"
+kind = "checkpoint-since-landing"
+
+[[checks]]
+id = "a2"
+on = "close"
+skill = "ness-entry"
+section = "Lifecycle"
+run = "true"

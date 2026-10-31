@@ -1,0 +1,39 @@
+# --client codex with the opt-in sends the launch to the codex atom with its trust, update and
+# hook flags (and no prompt: the launch submits it); --fallback-model is passed only when configured; the router's reason is stored.
+# covers: R-SESS-125, R-SESS-047, R-SESS-029, R-SESS-113, R-HOOK-018, R-MOD-044, R-MOD-043, R-MOD-030
+cd repo
+exec ness init --gate true --base main --yes
+cp ../ness.toml .ness/ness.toml
+exec git add -A
+exec git commit -q -m 'ness init'
+exec ness open --root --scope a --tier standard --brief ../b.md
+fake herdr args '--fallback-model sonnet '
+store last-session A
+store session $A client=claude
+exec ness open --root --scope b --tier economy --client codex --brief ../b.md
+fake herdr args '^-m gpt-6-luna -c model_reasoning_effort="medium" -c projects=\{".*/\.worktrees/b-[0-9a-f]{12}"=\{trust_level="trusted"\}\} -c check_for_update_on_startup=false --enable hooks --dangerously-bypass-hook-trust --dangerously-bypass-approvals-and-sandbox -c hooks\.SessionStart=.*hook session-start.* -c hooks\.PreToolUse=.*hook pre-tool.*$'
+! fake herdr args 'You are ness'
+fake herdr prompt '^You are ness session s-[0-9a-f]{12} \(b\)\. Read '
+! fake herdr args 'fallback'
+store last-session B
+store session $B client=codex client_session=
+# An exited Codex session cannot be relaunched: Codex has no session id to resume.
+fake herdr exit p-b
+exits 4 ness open --resume $B
+stderr 'codex sessions cannot be resumed'
+# Codex ids come from codex debug models: without astra the frontier row refuses.
+fake output 'codex debug models' '{"models":[{"slug":"gpt-6-luna"}]}'
+exits 4 ness open --root --scope c --tier economy --client codex --brief ../b.md
+stderr 'tier apex'
+stderr 'astra'
+
+-- ness.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"
+experimental = ["codex"]
+[models]
+fallback_model = "sonnet"
+-- b.md --
+b

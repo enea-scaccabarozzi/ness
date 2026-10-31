@@ -1,0 +1,31 @@
+name    = "go-strict"
+summary = "Strict Go quality (design §11, D2, D20): lint, test lint, the compliance audit, lefthook, make validate"
+requires_tools = ["python3", "golangci-lint", "go", "make"]
+
+[slots]
+".golangci.yml#module-path"          = { set = "slots/module-path.md" }
+".golangci.yml#go-version"           = { set = "slots/go-version.md" }
+".ness/audit.toml#package-roots"     = { set = "slots/package-roots.md" }
+".ness/audit.toml#composition-roots" = { set = "slots/composition-roots.md" }
+".ness/audit.toml#generated-dirs"    = { set = "slots/generated-dirs.md" }
+".ness/audit.toml#excluded-packages" = { set = "slots/excluded-packages.md" }
+".ness/audit.toml#exceptions-file"   = { set = "slots/exceptions-file.md" }
+".ness/audit.toml#ceilings"          = { set = "slots/ceilings.md" }
+".ness/audit.toml#libraries"         = { set = "slots/libraries.md" }
+"ness-entry#specify"                 = { append = "lifecycle/specify.md" }
+"ness-entry#plan"                    = { append = "lifecycle/plan.md" }
+"ness-entry#handoff"                 = { append = "lifecycle/handoff.md" }
+
+[files]
+".golangci.yml"               = { own = "golangci.yml" }
+".golangci.tests.yml"         = { own = "golangci.tests.yml" }
+"lefthook.yml"                = { own = "lefthook.yml" }
+".ness/audit.py"              = { own = "audit.py" }
+".ness/audit.toml"            = { own = "audit.toml" }
+".ness/audit-exceptions.txt"  = { seed = "audit-exceptions.txt" }
+"Makefile"                    = { seed = "Makefile" }
+".agents/skills/ness-interface-design/SKILL.md"  = { own = "skills/ness-interface-design/SKILL.md" }
+".agents/skills/ness-test-strategy/SKILL.md"     = { own = "skills/ness-test-strategy/SKILL.md" }
+".agents/skills/ness-test-discipline/SKILL.md"   = { own = "skills/ness-test-discipline/SKILL.md" }
+".agents/skills/ness-documentation/SKILL.md"     = { own = "skills/ness-documentation/SKILL.md" }
+".agents/skills/ness-compliance-check/SKILL.md"  = { own = "skills/ness-compliance-check/SKILL.md" }

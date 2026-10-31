@@ -1,0 +1,97 @@
+# ness pick runs the configured selector and prints the rung, model/effort and reason (the Agent
+# call line for a subagent, JSON with --json); with nothing to judge it prints the ladder with base
+# and ceiling marked; a missing or unknown kind exits 4 listing the kinds; the base moves every answer;
+# stdin is read only under --stdin; sweep is an alias of search.
+# covers: R-MOD-046
+cd repo
+exec ness init --gate true --base main --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+
+# Rejects: a pick that ignores the kind table: search is base-2 = economy.
+exec ness pick --kind search
+stdout '^economy +sonnet/medium +.*kind search'
+
+# Rejects: ignoring the named agent's kind: ness-design is design = deep.
+exec ness pick --agent ness-design --role subagent
+stdout '^deep +opus/high'
+stdout 'model: opus +effort: high'
+
+# Rejects: an Agent call line printed for a child, which spawns no Agent call.
+exec ness pick --kind verify --role child
+stdout '^deep +opus/high'
+! stdout 'model: '
+
+# Rejects: --json that drops a field or renames it.
+exec ness pick --kind search --json
+stdout '"rung": *"economy"'
+stdout '"model": *"sonnet"'
+stdout '"effort": *"medium"'
+stdout '"index": *1'
+stdout '"confidence": *1'
+stdout '"reason": *"kind search"'
+
+# Rejects: a listing that omits rungs or the codex column, or does not mark base and ceiling.
+exec ness pick
+stdout '^bulk +haiku/medium +gpt-6-luna/low'
+stdout '^standard +opus/medium +gpt-6.1-sol/medium.*base'
+stdout '^apex +fable/high +astra/high.*ceiling'
+! stdout '^economy.*base'
+stdout -count=7 '^(bulk|economy|lean|standard|deep|frontier|apex) '
+
+# Rejects: --json without a task that prints text instead of one JSON ladder (R-CFG-032).
+exec ness pick --json
+stdout '"schema": 1'
+stdout '"base": "standard"'
+stdout '"ceiling": "apex"'
+stdout '"name": "bulk",\n *"claude": "haiku/medium",\n *"codex": "gpt-6-luna/low"'
+
+# Rejects: a Claude Agent call line printed when the client is codex.
+cp .ness/ness.toml ../saved.toml
+exec sh -c 'printf "client = \"codex\"\nexperimental = [\"codex\"]\n" | cat - ../saved.toml > .ness/ness.toml'
+exec ness pick --kind search
+stdout '^economy +gpt-6-luna/medium'
+! stdout 'model: '
+cp ../saved.toml .ness/ness.toml
+
+# Rejects: defaulting an unknown or missing kind to base instead of exit 4 with the list.
+exits 4 ness pick --kind Design
+stderr 'search'
+stderr 'design'
+stdin ../task.txt
+exits 4 ness pick --stdin
+stderr 'implement'
+
+# Rejects: a pick that reads stdin unasked: a Bash call with a heredoc never closes it and the
+# pick hangs; without --stdin the text is not read, so this prints the ladder.
+stdin ../task.txt
+exec ness pick
+stdout '^standard .*base'
+
+# Rejects: sweep refused as a kind: it is search (ness-sweep's kind) under another name.
+exec ness pick --kind sweep
+stdout '^economy +sonnet/medium +.*kind search'
+
+# Rejects: a fixed base: base economy shifts search down to bulk and design to lean; the
+# listing marks the new base and the ceiling.
+cp ../economy.toml .ness/ness.toml
+exec git commit -q -am 'base economy'
+exec ness pick --kind search
+stdout '^bulk +haiku/medium'
+exec ness pick --kind design
+stdout '^lean +opus/low'
+exec ness pick
+stdout '^economy +sonnet/medium.*base'
+stdout '^deep .*ceiling'
+! stdout '^standard .*base'
+
+-- task.txt --
+Find every caller of Run.
+-- economy.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"
+[models]
+base = "economy"
+ceiling = "deep"

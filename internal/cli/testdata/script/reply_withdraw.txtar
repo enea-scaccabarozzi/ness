@@ -1,0 +1,79 @@
+# The sender withdraws an open item it sent: `ness reply --as withdrawn` settles it with the reason
+# as answer, the recipient's inbox lists the reason as a reply, and the recipient's close is no
+# longer blocked. Only the sender withdraws; a reply or a disposed item is refused. A recipient
+# hands work back with --as returned: the item is settled and the sender gets the answer.
+# covers: R-MSG-060, R-MSG-061, R-MSG-062, R-MSG-064
+cd repo
+exec ness init --gate true --base main --yes
+store add-session s-aaaaaaaaaaaa root
+store add-session s-bbbbbbbbbbbb child-b s-aaaaaaaaaaaa
+store add-session s-cccccccccccc child-c s-aaaaaaaaaaaa
+env NESS_TEST_NOW=2026-10-08T10:00:00Z
+env NESS_SESSION=s-aaaaaaaaaaaa
+exec ness send --to s-bbbbbbbbbbbb --body 'please do x' --intent request
+store last s-bbbbbbbbbbbb REQ
+# The recipient cannot withdraw; neither can a sibling.
+env NESS_SESSION=s-bbbbbbbbbbbb
+exits 4 ness reply $REQ --body 'no' --as withdrawn
+stderr 'only its sender withdraws it'
+env NESS_SESSION=s-cccccccccccc
+exits 4 ness reply $REQ --body 'no' --as withdrawn
+stderr 'only its sender withdraws it'
+store item $REQ disposition=
+# The sender withdraws: settled, the reason is the answer, the recipient reads it as a reply.
+env NESS_SESSION=s-aaaaaaaaaaaa
+exec ness reply $REQ --body 'did it myself' --as withdrawn
+stdout '^withdrew m-[a-z2-7]{8}$'
+store item $REQ disposition=withdrawn 'answer=did it myself'
+store items s-aaaaaaaaaaaa 0
+exits 4 ness reply $REQ --body 'again' --as withdrawn
+stderr 'already withdrawn'
+env NESS_SESSION=s-bbbbbbbbbbbb
+exec ness inbox
+stdout '^m-[a-z2-7]{8}\ts-aaaaaaaaaaaa\treply\t0m\twithdrew m-[a-z2-7]{8}: did it myself$'
+! stdout 'request'
+store last s-bbbbbbbbbbbb NOTICE
+store item $NOTICE intent=reply sender=s-aaaaaaaaaaaa recipient=s-bbbbbbbbbbbb
+# The recipient settles the notice it received; nothing goes back to the sender (R-MSG-050).
+exec ness reply $NOTICE --body x --as resolved
+store item $NOTICE disposition=resolved
+store items s-aaaaaaaaaaaa 0
+# A reply cannot be withdrawn by its sender either.
+env NESS_SESSION=s-aaaaaaaaaaaa
+exits 4 ness reply $NOTICE --body x --as withdrawn
+stderr 'is a reply'
+# A deferred item is still open: the sender may withdraw it.
+exec ness send --to s-bbbbbbbbbbbb --body 'later maybe' --intent decision
+store last s-bbbbbbbbbbbb DEC
+env NESS_SESSION=s-bbbbbbbbbbbb
+exec ness reply $DEC --body 'not now' --as deferred
+env NESS_SESSION=s-aaaaaaaaaaaa
+exec ness reply $DEC --body 'settled elsewhere' --as withdrawn
+store item $DEC disposition=withdrawn 'answer=settled elsewhere'
+# The child sends the operator a request and withdraws it: the operator reads the notice.
+env NESS_SESSION=s-bbbbbbbbbbbb
+exec ness send --to operator --body 'may I?' --intent request
+store last operator OPQ
+exec ness reply $OPQ --body 'found the answer' --as withdrawn
+store item $OPQ disposition=withdrawn
+env NESS_SESSION=
+exec ness inbox
+stdout 'withdrew m-[a-z2-7]{8}: found the answer'
+# Returned: the recipient hands the work back; the item is settled and the sender gets the answer.
+env NESS_SESSION=s-aaaaaaaaaaaa
+exec ness send --to s-bbbbbbbbbbbb --body @../h.md --intent handoff
+store last s-bbbbbbbbbbbb HAND
+env NESS_SESSION=s-bbbbbbbbbbbb
+exec ness reply $HAND --body 'outside my scope' --as returned
+stdout '^replied m-[a-z2-7]{8} as returned$'
+store item $HAND disposition=returned 'answer=outside my scope'
+env NESS_SESSION=s-aaaaaaaaaaaa
+exec ness inbox
+stdout 'reply\t0m\toutside my scope$'
+-- h.md --
+## Done
+x
+## Now
+y
+## Next
+z

@@ -1,0 +1,106 @@
+# For a bound session, session-start writes the ready mark once, prints the identity and the cheat
+# sheet (under 20 lines) at every start (startup, resume, clear, compact); after a compaction it
+# also says to re-read the brief and the inbox, prints core's operator and autonomy reload lines and
+# the post-compact files a profile listed.
+# The identity line carries the derived phase; a second startup leaves the stored phase untouched.
+# covers: R-MOD-062, R-HOOK-003, R-HOOK-004, R-HOOK-006, R-HOOK-007, R-HOOK-009, R-BLT-107, R-BLT-108
+cd repo
+exec ness init --gate true --base main --yes
+cp ../ness.toml .ness/ness.toml
+store add-session s-aaaaaaaaaaaa root
+store add-session s-bbbbbbbbbbbb child-b s-aaaaaaaaaaaa
+env NESS_SESSION=s-bbbbbbbbbbbb
+env NESS_TEST_NOW=2026-10-08T10:00:00Z
+store session s-bbbbbbbbbbbb ready=false
+store phase s-bbbbbbbbbbbb waiting-ready
+stdin ../startup.json
+exec ness hook session-start
+cmp stdout ../startup.txt
+! stdout 'After compaction'
+! stderr .
+store session s-bbbbbbbbbbbb ready=2026-10-08T10:00:00Z phase=waiting-ready
+# A second startup keeps the first mark and does not touch the phase (R-HOOK-009).
+env NESS_TEST_NOW=2026-10-08T10:05:00Z
+stdin ../startup.json
+exec ness hook session-start
+store session s-bbbbbbbbbbbb ready=2026-10-08T10:00:00Z phase=waiting-ready
+# A resume and a clear print the same as a startup, the post-compact list excluded.
+stdin ../resume.json
+exec ness hook session-start
+cmp stdout ../startup.txt
+stdin ../clear.json
+exec ness hook session-start
+cmp stdout ../startup.txt
+# After compaction: identity, the re-read line, the cheat sheet, the post-compact list; at most 20 lines.
+stdin ../compact.json
+exec ness hook session-start
+cmp stdout ../compact.txt
+! stdout '(?s)(.*\n){21}'
+stdout 'Operator communication'
+stdout 'Autonomy'
+# Rejects: compaction losing the ladder rule (kind line, ness pick, one-rung escalate) or the
+# cheat sheet losing ness pick (R-MOD-062).
+stdout -count=1 '^- Models: every subagent call carries a `kind: <name>` line and the model and effort `ness pick` gives; the hook refuses a rung above the recommendation unless the prompt has `escalate: <reason>` \(one rung\)\.$'
+stdout -count=1 '^  ness pick '
+# A root's manager is the operator.
+env NESS_SESSION=s-aaaaaaaaaaaa
+stdin ../startup.json
+exec ness hook session-start
+stdout '^ness session s-aaaaaaaaaaaa scope root manager operator size full phase ready$'
+stdout -count=1 '^ness cheat sheet$'
+
+-- ness.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"
+profiles = ["local"]
+-- repo/.ness/profiles/local/profile.toml --
+name = "local"
+[slots]
+"ness-entry#post-compact" = { append = "reload.md" }
+-- repo/.ness/profiles/local/reload.md --
+- docs/sessions/root/plan.md
+- docs/sessions/root/decisions.md
+-- startup.json --
+{"hook_event_name":"SessionStart","source":"startup","session_id":"c0ffee"}
+-- resume.json --
+{"hook_event_name":"SessionStart","source":"resume","session_id":"c0ffee"}
+-- clear.json --
+{"hook_event_name":"SessionStart","source":"clear","session_id":"c0ffee"}
+-- startup.txt --
+ness session s-bbbbbbbbbbbb scope child-b manager s-aaaaaaaaaaaa phase ready
+ness cheat sheet
+  ness inbox                                       list your open items, one line each
+  ness inbox --show ITEM...                        read items in full (--unread: every unread one)
+  ness inbox --boundary NOTE [--until T]           state written down; compact me; parked until T
+  ness send --to manager|ID|operator --body TEXT|@FILE  [--intent request|fyi|decision|handoff|checkpoint] [--urgent]
+  ness reply ITEM --body TEXT|@FILE                [--as resolved|declined|deferred|accepted|returned|withdrawn]
+  ness open --scope NAME --tier TIER --brief FILE  launch a child
+  ness integrate --subject 'type(scope): summary'  fold this branch through the gate into the manager's
+  ness close ID [--note TEXT] [--withdraw] [--authorized WORDS]  close a child; your root, with the operator's words
+  ness probe start|run|verdict|stop                probes, when the feature is on
+  ness pick --kind NAME                            the model and effort for a subagent
+Waiting rule: pull once, then end your turn; the worker wakes you when something arrives.
+-- compact.json --
+{"hook_event_name":"SessionStart","source":"compact","session_id":"c0ffee"}
+-- compact.txt --
+ness session s-bbbbbbbbbbbb scope child-b manager s-aaaaaaaaaaaa phase ready
+After compaction: re-read your brief and your inbox first.
+ness cheat sheet
+  ness inbox                                       list your open items, one line each
+  ness inbox --show ITEM...                        read items in full (--unread: every unread one)
+  ness inbox --boundary NOTE [--until T]           state written down; compact me; parked until T
+  ness send --to manager|ID|operator --body TEXT|@FILE  [--intent request|fyi|decision|handoff|checkpoint] [--urgent]
+  ness reply ITEM --body TEXT|@FILE                [--as resolved|declined|deferred|accepted|returned|withdrawn]
+  ness open --scope NAME --tier TIER --brief FILE  launch a child
+  ness integrate --subject 'type(scope): summary'  fold this branch through the gate into the manager's
+  ness close ID [--note TEXT] [--withdraw] [--authorized WORDS]  close a child; your root, with the operator's words
+  ness probe start|run|verdict|stop                probes, when the feature is on
+  ness pick --kind NAME                            the model and effort for a subagent
+Waiting rule: pull once, then end your turn; the worker wakes you when something arrives.
+- Operator communication: decision-first and short, long content on a page; the operator reads only your chat, never `ness inbox` and never answers on the phone: write every ask and report in full in the chat, then file it with `ness send --to operator` so the phone points them to you; a child asks only for what its manager cannot settle.
+- Autonomy: act at the level your brief states; a root never lowers a child's level; reserved decisions stay the operator's.
+- Models: every subagent call carries a `kind: <name>` line and the model and effort `ness pick` gives; the hook refuses a rung above the recommendation unless the prompt has `escalate: <reason>` (one rung).
+- docs/sessions/root/plan.md
+- docs/sessions/root/decisions.md

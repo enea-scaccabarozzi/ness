@@ -1,0 +1,44 @@
+# A child whose branch is already in its base (merged there by hand, no ness integrate) closes
+# without --discard: close records the base's sha as its integration and says so, and the branch
+# goes like any integrated one. A child with work its base lacks is still refused, and an
+# uncommitted file refuses the close with a message naming --keep-work.
+# covers: R-SESS-167, R-SESS-064, R-SESS-103
+cd repo
+exec ness init --gate true --base main --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+store get $R branch RB
+exec sh -c 'cd .worktrees/r-* && NESS_SESSION=$R ness open --scope c --tier standard --brief ../../../b.md'
+store last-session C
+store get $C branch CB
+exec sh -c 'cd .worktrees/r-* && NESS_SESSION=$R ness open --scope u --tier standard --brief ../../../b.md'
+store last-session U
+env NESS_SESSION=$R
+# U has work its base lacks: still refused, nothing recorded.
+exec sh -c 'cd .worktrees/u-* && printf "## Lessons\nNone.\n" > docs/sessions/r/u/report.md && echo w > w.txt && git add -A && git commit -q -m work'
+exits 4 ness close $U
+stderr 'no integration recorded'
+store session $U closed=false integrated=
+# C's report is merged into r by hand: C's branch is an ancestor of its base.
+exec sh -c 'cd .worktrees/c-* && printf "## Lessons\nNone.\n" > docs/sessions/r/c/report.md && git add -A && git commit -q -m report'
+exec sh -c 'cd .worktrees/r-* && git merge -q --no-edit $CB'
+exec git merge-base --is-ancestor $CB $RB
+# An uncommitted file refuses, naming the way to keep it.
+exec sh -c 'cd .worktrees/c-* && echo wip > wip.txt'
+exits 4 ness close $C
+stderr 'uncommitted changes.*--keep-work'
+store session $C closed=false integrated=
+exec sh -c 'rm .worktrees/c-*/wip.txt'
+exec ness close $C --note 'merged by hand'
+stdout '^nothing to integrate: session/c-[^ ]+ is already in session/r-[^ ]+; recorded [0-9a-f]{40}$'
+stdout '^closed s-[0-9a-f]{12} \(c\)$'
+store session $C closed=true
+store get $C integrated REF
+exec sh -c 'test "$REF" = "$(git rev-parse $RB)"'
+exec git branch --list $CB
+! stdout .
+
+-- b.md --
+b

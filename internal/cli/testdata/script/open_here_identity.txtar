@@ -1,0 +1,40 @@
+# After open --root --here, a process with only the conversation id acts as the adopted root;
+# NESS_SESSION wins; once the root is closed the same id is the operator again.
+# covers: R-SESS-114
+cd repo
+exec ness init --gate true --base main --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+env HERDR_PANE_ID=w1:p7
+env HERDR_TAB_ID=w1:t7
+env CLAUDE_CODE_SESSION_ID=0bad0bad-0000-4000-8000-000000000000
+exec ness open --root --here --scope prog --tier standard --brief ../b.md
+store last-session R
+# Only the conversation id: the root is the caller.
+exits 4 ness open --root --scope other --tier standard --brief ../b.md
+stderr 'operator'
+exec ness send --to operator --intent fyi --body hi
+store last operator M
+store item $M sender=$R
+stdin ../startup.json
+exec ness hook session-start
+stdout '^ness session s-[0-9a-f]{12} scope prog manager operator'
+# NESS_SESSION wins over the conversation id.
+env NESS_SESSION=s-000000000099
+exits 4 ness status
+stderr 'not a session'
+env NESS_SESSION=
+# The operator closes the root from a shell without the conversation id.
+env CLAUDE_CODE_SESSION_ID=
+exec sh -c 'cd .worktrees/prog-* && printf "## Lessons\nNone.\n" > docs/sessions/prog/report.md && git add -A && git commit -q -m report'
+exec ness close $R --discard --note n
+store session $R closed=true
+# The id of a closed adopted root is the operator's again.
+env CLAUDE_CODE_SESSION_ID=0bad0bad-0000-4000-8000-000000000000
+exec ness status
+exec ness open --root --scope again --tier standard --brief ../b.md
+
+-- b.md --
+b
+-- startup.json --
+{"hook_event_name":"SessionStart","source":"startup","session_id":"0bad0bad-0000-4000-8000-000000000000"}

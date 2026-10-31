@@ -1,0 +1,92 @@
+# ness post takes --channel and --file (both required), optionally --thread and --dry-run;
+# refuses an unknown channel listing the configured ones; any session or the operator may post;
+# the token comes from its env: reference and a missing variable refuses before any request; --dry-run
+# prints exactly the bodies a real post sends and makes no request, even without the token;
+# note.<channel>.md is sent verbatim; a thread key is recorded in the store and reused by a
+# second process; an empty note refuses; ness send never posts.
+# covers: R-NTF-001, R-NTF-002, R-NTF-003, R-NTF-004, R-NTF-008, R-NTF-040, R-NTF-042, R-NTF-023, R-NTF-006
+cd repo
+exec ness init --gate true --base main --yes
+exec sh -c 'cat ../channels.toml >> .ness/ness.toml'
+exec git add -A
+exec git commit -q -m 'ness init'
+# Flags.
+exits 2 ness post --file ../note.md
+stderr 'channel is required'
+exits 2 ness post --channel releases
+stderr 'file is required'
+exits 4 ness post --channel nope --file ../note.md
+stderr 'no such channel nope; configured: announce, releases'
+# Missing token: refused, no request. A dry run needs no token and sends nothing.
+exits 4 ness post --channel releases --file ../note.md
+stderr 'SLACK_TOKEN is not set'
+fake http requests 0
+exec ness post --channel releases --file ../note.md --thread v1 --dry-run
+cp stdout ../dry
+fake http requests 0
+env SLACK_TOKEN=test-token
+# The real post sends the body the dry run printed.
+exec ness post --channel releases --file ../note.md --thread v1
+stdout '^posted 1 part to releases$'
+fake http requests 1
+fake http body 1 ../sent
+cmp ../dry ../sent
+grep '"type":"markdown"' ../sent
+! grep 'thread_ts' ../sent
+# The second post with the same key replies in the thread recorded by the first, from a new process.
+exec ness post --channel releases --file ../note2.md --thread v1
+fake http requests 2
+fake http body 2 ../sent2
+grep '"thread_ts":"1700000000.000001"' ../sent2
+# The first post recorded the thread in the store; a post another run is sending refuses (exit 4) and sends nothing.
+store thread releases v1 1700000000.000001
+store claim-posts all
+exits 4 ness post --channel releases --file ../note2.md --thread v1
+stderr 'is being sent by another run'
+fake http requests 2
+# A session posts too.
+store add-session s-aaaaaaaaaaaa root
+env NESS_SESSION=s-aaaaaaaaaaaa
+exec ness post --channel releases --file ../note.md
+fake http requests 3
+env NESS_SESSION=
+# note.<channel>.md next to the note goes verbatim.
+exec ness post --channel releases --file ../pkg/note.md
+fake http body 4 ../sent4
+grep 'hand-tuned for slack' ../sent4
+! grep 'rendered' ../sent4
+# An empty note refuses before any request.
+exits 2 ness post --channel releases --file ../empty.md
+stderr 'empty'
+fake http requests 4
+# send never posts.
+env NESS_SESSION=s-aaaaaaaaaaaa
+exec ness send --to operator --body 'please post the note'
+fake http requests 4
+# Outside a project: refused.
+cd $WORK
+exits 4 ness post --channel releases --file note.md
+
+-- channels.toml --
+features = ["notify"]
+[notify.channels.releases]
+kind = "slack"
+token = "env:SLACK_TOKEN"
+channel_id = "C0TEST"
+[notify.channels.announce]
+kind = "telegram"
+token = "env:TG_TOKEN"
+chat_id = "1001"
+-- note.md --
+# Release 1.2
+
+Shipped **today**.
+-- note2.md --
+Follow-up.
+-- pkg/note.md --
+rendered text
+-- pkg/note.slack.md --
+hand-tuned for slack
+-- empty.md --
+
+

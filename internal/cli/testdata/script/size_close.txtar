@@ -1,0 +1,49 @@
+# A close check gated to a size runs for the root being closed whoever closes it: the operator
+# closing a full root meets a size = ["full"] check, and a quick root in the same project does not.
+# covers: R-SESS-163, R-CHK-015
+cd repo
+exec ness init --gate true --base main --yes
+cp ../ness.toml .ness/ness.toml
+mkdir .ness/profiles/local
+cp ../profile.toml .ness/profiles/local/profile.toml
+exec ness sync
+exec git add -A
+exec git commit -q -m 'ness init'
+exec ness open --root --scope f --tier standard --brief ../b.md
+store last-session F
+exec ness open --root --scope q --tier standard --size quick --brief ../b.md
+store last-session Q
+exec sh -c 'cd .worktrees/f-* && printf "## Lessons\\nNone.\\n" > docs/sessions/f/report.md && git add -A && git commit -q -m report && NESS_SESSION=$F ness integrate --subject "feat: f"'
+exec sh -c 'cd .worktrees/q-* && printf "## Lessons\\nNone.\\n" > docs/sessions/q/report.md && git add -A && git commit -q -m report && NESS_SESSION=$Q ness integrate --subject "feat: q"'
+
+# The quick root closes: the full-only check does not apply to it.
+exec ness close $Q
+store session $Q closed=true
+# The full root, closed by the operator, meets the check.
+exits 4 ness close $F
+stderr 'local/full-only: no allow file'
+store session $F closed=false
+exec touch $WORK/allow
+exec ness close $F
+store session $F closed=true
+
+-- ness.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"
+profiles = ["local"]
+-- profile.toml --
+name = "local"
+
+[[checks]]
+id      = "full-only"
+on      = "close"
+for     = "root"
+size    = ["full"]
+skill   = "ness-entry"
+section = "Communicate"
+message = "Create the allow file."
+run     = 'test -e "$WORK/allow" || { echo "no allow file"; exit 3; }'
+-- b.md --
+b

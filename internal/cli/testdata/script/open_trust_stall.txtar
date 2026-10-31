@@ -1,0 +1,22 @@
+# A stalled Claude launch whose pane shows the trust dialog names that cause.
+# covers: R-SESS-033
+cd repo
+exec ness init --gate true --base main --yes
+cp ../ness.toml .ness/ness.toml
+exec git add -A
+exec git commit -q -m 'ness init'
+fake herdr ready-on-start false
+fake herdr screen wF:p1 'Do you trust this folder?'
+exits 4 ness open --root --scope prog --tier standard --brief ../b1.md
+stderr 'stalled launch'
+stderr 'Claude Code is asking whether to trust .*repo/.worktrees/prog-[0-9a-f]+; accept it in the session''s tab'
+stderr 'then ness open --resume s-[0-9a-f]{12}'
+-- ness.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"
+[launch]
+ready_timeout = "200ms"
+-- b1.md --
+one

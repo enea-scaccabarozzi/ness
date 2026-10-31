@@ -1,0 +1,26 @@
+# integrate.setup runs in the gate worktree before the gate; a failing setup fails the integrate
+# and leaves the target unchanged.
+# covers: R-SESS-146, R-CFG-061
+cd repo
+exec ness init --gate 'test -f linked' --base main --yes
+exec sh -c 'printf "[integrate]\nmode = \"squash\"\nsetup = \"touch linked\"\n" >> .ness/ness.toml'
+exec git add -A
+exec git commit -q -m 'ness init'
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+exec git rev-parse main
+cp stdout ../main-before
+# A failing setup: exit 1, target unchanged, the gate never reached.
+exec sh -c 'cd .worktrees/r-* && sed -i "s/touch linked/false/" .ness/ness.toml && echo a > a.txt && git add -A && git commit -q -m a'
+exec sh -c 'cd .worktrees/r-* && NESS_SESSION=$R ness integrate --subject "feat: x"; echo "exit $?"'
+stdout 'exit 1'
+exec git rev-parse main
+cmp stdout ../main-before
+# A working setup makes the gate pass and the target moves.
+exec sh -c 'cd .worktrees/r-* && sed -i "s/= \"false\"/= \"touch linked\"/" .ness/ness.toml && git add -A && git commit -q -m fix'
+exec sh -c 'cd .worktrees/r-* && NESS_SESSION=$R ness integrate --subject "feat: x"'
+exec git rev-parse main
+! cmp stdout ../main-before
+
+-- b.md --
+b

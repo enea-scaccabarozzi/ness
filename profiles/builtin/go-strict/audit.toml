@@ -1,0 +1,10 @@
+# go-strict compliance audit configuration, rendered by ness sync (R-BLT-060). Change a value
+# through a slot of your local profile, for example in .ness/profiles/local/profile.toml:
+#   ".ness/audit.toml#ceilings" = { set = "ceilings.md" }
+<!-- ness:slot single package-roots -->
+<!-- ness:slot single composition-roots -->
+<!-- ness:slot single generated-dirs -->
+<!-- ness:slot single excluded-packages -->
+<!-- ness:slot single exceptions-file -->
+<!-- ness:slot single ceilings -->
+<!-- ness:slot single libraries -->

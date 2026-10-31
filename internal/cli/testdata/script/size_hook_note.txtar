@@ -1,0 +1,15 @@
+# The unbound note offers the sizes the project knows: a program project adds its size to the
+# promote command and names it as the default.
+# covers: R-HOOK-027
+cd repo
+exec ness init --gate true --base main --profile program --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+stdin ../startup.json
+exec ness hook session-start
+stdout 'ness open --root --here --scope NAME --tier TIER --size quick\|full\|program --brief FILE'
+stdout 'program is the default'
+! stderr .
+
+-- startup.json --
+{"hook_event_name":"SessionStart","source":"startup","session_id":"0bad0bad-0000-4000-8000-000000000001"}

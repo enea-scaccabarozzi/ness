@@ -1,0 +1,31 @@
+# With the pr integrator close refuses while the PR is open and succeeds once merged.
+# covers: R-SESS-071
+cd repo
+exec ness init --gate true --base main --yes
+cp ../pr.toml .ness/ness.toml
+exec git add -A
+exec git commit -q -m 'ness init'
+exec git init -q --bare ../remote
+exec git remote add origin ../remote
+exec git push -q origin main
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+exec sh -c 'cd .worktrees/r-* && printf "## Lessons\nNone.\n" > docs/sessions/r/report.md && git add -A && git commit -q -m r && NESS_SESSION=$R ness integrate'
+fake forge last PR
+exits 4 ness close $R
+stderr 'not merged'
+exec git worktree list
+stdout 'worktrees/r-'
+fake forge merge $PR
+exec ness close $R
+store session $R closed=true
+
+-- b.md --
+b
+-- pr.toml --
+ness = "0.1"
+project = "repo"
+base = "main"
+gate = "true"
+[integrate]
+mode = "pr"

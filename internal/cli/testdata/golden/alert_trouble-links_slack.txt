@@ -1,0 +1,4 @@
+🔴 **Trouble** · example-lab
+**[weekly-review-plan](https://claude.ai/code/session_01AbC)**
+
+is blocked on a prompt in its tab

@@ -1,0 +1,2 @@
+One directory per built-in profile, each with a profile.toml (R-PROF-002): program, go-strict, behavior-specs, git-conventional, example-release. The text contains no project specifics (R-BLT-003): .private/denylist.txt, when present, is scanned over every file here by profiles_test.go.
+Authoring a profile and giving its rules checks: [docs/profiles/authoring.md](../../docs/profiles/authoring.md).

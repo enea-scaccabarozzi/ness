@@ -1,0 +1,13 @@
+# go-strict compliance audit configuration, rendered by ness sync (R-BLT-060). Change a value
+# through a slot of your local profile, for example in .ness/profiles/local/profile.toml:
+#   ".ness/audit.toml#ceilings" = { set = "ceilings.md" }
+package_roots = ["internal", "cmd"]
+composition_roots = ["cmd", "internal/cli"]
+generated_dirs = []
+excluded_packages = []
+exceptions_file = ".ness/audit-exceptions.txt"
+[ceilings]
+test_file_lines = 400
+[libraries]
+logger = "log/slog"
+validator = ""

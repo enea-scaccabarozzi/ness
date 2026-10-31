@@ -1,0 +1,59 @@
+# A root takes a work size at open: full when omitted, quick or full when given, a profile's size
+# only when that profile is on; a child has none and cannot be given one. A quick root opens no
+# child until it resizes to full; shrinking refuses while a child is open.
+# covers: R-SESS-155, R-SESS-158, R-SESS-159, R-SESS-160
+cd repo
+exec ness init --gate true --base main --yes
+cp ../ness.toml .ness/ness.toml
+exec git add -A
+exec git commit -q -m 'ness init'
+# Omitted: full. Given: kept.
+exec ness open --root --scope a --tier standard --brief ../b.md
+store last-session A
+store session $A size=full
+exec ness open --root --scope q --tier standard --size quick --brief ../b.md
+store last-session Q
+store session $Q size=quick
+# Unknown sizes are refused before any write, naming the valid ones; program needs its profile.
+exits 4 ness open --root --scope x --tier standard --size huge --brief ../b.md
+stderr 'size "huge" is not one of: quick, full'
+stderr '\(skill ness-entry, section Work sizes\)'
+exits 4 ness open --root --scope x --tier standard --size program --brief ../b.md
+stderr 'size "program" is not one of: quick, full'
+store sessions 2
+# A child has no size, from the operator's shell or from a session.
+exits 4 ness open --scope x --tier standard --size full --brief ../b.md
+stderr '--size needs --root: children have no size'
+# A quick root opens no child; the refusal names the way out.
+exec sh -c 'cd .worktrees/q-* && NESS_SESSION=$Q ness open --scope k --tier standard --brief "$WORK/b.md" 2>&1; echo "exit $?"'
+stdout 'exit 4'
+stdout 'is size quick: a quick root delegates to subagents'
+stdout 'ness size full'
+stdout '\(skill ness-entry, section Quick root\)'
+store sessions 2
+# After the resize the same open succeeds.
+env NESS_SESSION=$Q
+exec ness size full
+stdout '^size full: write specs.md and plan.md before the next commit'
+store session $Q size=full
+exec sh -c 'cd .worktrees/q-* && ness open --scope k --tier standard --brief "$WORK/b.md"'
+store last-session K
+store session $K size=
+# Shrinking with an open child is refused; closed children are history.
+exits 4 ness size quick
+stderr 'close or finish s-[0-9a-f]{12} first: a quick root has no children'
+store session $Q size=full
+# A child cannot resize anything, not even its own root.
+env NESS_SESSION=$K
+exits 4 ness size full
+stderr 'children have no size; ask your root'
+env NESS_SESSION=
+
+-- b.md --
+b
+-- ness.toml --
+ness = "0.1"
+project = "demo-app"
+base = "main"
+gate = "true"
+sessions = "rec"

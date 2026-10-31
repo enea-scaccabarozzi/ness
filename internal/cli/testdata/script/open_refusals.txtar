@@ -1,0 +1,129 @@
+# Every environment and flag check refuses with exit 4 before any side effect: no worktree,
+# branch, file, store row or tab. Flag errors are usage (exit 2).
+# covers: R-SESS-001, R-SESS-002, R-SESS-003, R-SESS-004, R-SESS-005, R-SESS-010, R-SESS-017, R-SESS-023, R-SESS-024, R-SESS-039, R-SESS-040, R-SESS-041, R-SESS-043, R-MOD-013, R-MOD-031, R-CFG-036, R-CFG-044
+cd repo
+exec ness init --gate true --base main --yes
+cp ../ness.toml .ness/ness.toml
+exec git add -A
+exec git commit -q -m 'ness init'
+snap clean
+# Usage errors.
+exits 2 ness open --root --tier standard --brief ../brief.md
+stderr '\-\-scope'
+exits 2 ness open --root --scope Sync_1 --tier standard --brief ../brief.md
+stderr 'scope'
+exits 2 ness open --root --scope x --tier standard --effort huge --brief ../brief.md
+stderr 'claude'
+exits 2 ness open --root --scope x --tier standard --model opus --brief ../brief.md
+stderr 'unknown flag'
+# A resume id that is not a session id never reaches a path; an unknown well-formed id and a
+# bad --base leave no lock file, row, worktree or branch.
+exits 4 ness open --resume ../x
+stderr 'not a session id'
+exits 4 ness open --resume s-bbbbbbbbbbbb
+stderr 'not a session of this project'
+exec sh -c 'test -z "$(ls .git/ness/*.lock .git/x.lock 2>/dev/null)"'
+exits 4 ness open --root --scope y --tier standard --base nope --brief ../brief.md
+stderr 'nope'
+exits 4 ness open --root --scope y --tier standard --base=--force --brief ../brief.md
+stderr 'not a branch or commit'
+# Precondition refusals.
+exits 4 ness open --root --scope x --tier ultra --brief ../brief.md
+stderr 'bulk, economy, lean, standard, deep, frontier, apex'
+exits 4 ness open --scope x --tier standard --here --brief ../brief.md
+stderr '\-\-here needs --root'
+exits 4 ness open --scope x --tier standard --base main --brief ../brief.md
+stderr '\-\-base needs --root'
+exits 4 ness open --root --scope x --tier standard --client codex --brief ../brief.md
+stderr 'experimental'
+exits 4 ness open --root --scope x --tier standard --brief ../missing.md
+stderr 'missing.md'
+# A session may not open a root; the operator may not open a child.
+env NESS_SESSION=s-aaaaaaaaaaaa
+store add-session s-aaaaaaaaaaaa prog
+exits 4 ness open --root --scope x --tier standard --brief ../brief.md
+stderr 'only the operator opens a root'
+stderr 'skill ness-[a-z-]+, section [A-Z]'
+env NESS_SESSION=
+exits 4 ness open --scope x --tier standard --brief ../brief.md
+stderr 'a child needs a manager'
+# Environment checks, each named with its fix.
+fake missing herdr
+exits 4 ness open --root --scope x --tier standard --brief ../brief.md
+stderr 'herdr is required'
+! stderr 'tmux'
+cp ../fakes-reset.json $NESS_TEST_FAKES/exec.json
+fake herdr version 0.5.0
+exits 4 ness open --root --scope x --tier standard --brief ../brief.md
+stderr '0\.5\.0'
+stderr '0\.8\.2'
+fake herdr version 0.8.2
+fake output 'claude --version' '1.0.99 (Claude Code)'
+exits 4 ness open --root --scope x --tier standard --brief ../brief.md
+stderr '1\.0\.99'
+stderr '2\.1\.294'
+fake output 'claude --version' '2.1.294 (Claude Code)'
+fake missing claude
+exits 4 ness open --root --scope x --tier standard --brief ../brief.md
+stderr 'claude is not installed'
+cp ../fakes-reset.json $NESS_TEST_FAKES/exec.json
+cp ../tiers-bad.toml .ness/ness.toml
+exits 4 ness open --root --scope x --tier standard --brief ../brief.md
+stderr 'tier frontier'
+stderr 'best'
+cp ../ness.toml .ness/ness.toml
+mkdir $HOME/.claude/skills/deploy
+mkdir .agents/skills/deploy
+exits 4 ness open --root --scope x --tier standard --brief ../brief.md
+stderr '\.claude/skills/deploy'
+stderr '\.agents/skills/deploy'
+rm $HOME/.claude/skills/deploy
+rm .agents/skills/deploy
+# Nothing happened.
+samesnap clean
+store sessions 1
+fake herdr tabs 0
+exec git worktree list
+! stdout worktrees
+exec git branch --list 'session/*'
+! stdout .
+# At the threshold the selector's rung is used and its reason recorded.
+env NESS_TEST_ROUTER=0.8
+exec ness open --root --scope x --brief ../brief.md
+store last-session X
+store session $X tier=standard router_reason='fake selector: root'
+env NESS_TEST_ROUTER=
+# A second open sibling with the same scope under the same manager is refused (Review Focus 4).
+exits 4 ness open --root --scope x --tier standard --brief ../brief.md
+stderr 'scope x is already open'
+store sessions 2
+# Rejects: a low-confidence verdict that is followed, and a threshold verdict that falls back:
+# offset +2 at 0.79 gives base, at 0.8 gives frontier.
+env NESS_TEST_ROUTER_OFFSET=2
+env NESS_TEST_ROUTER=0.79
+exec ness open --root --scope lowc --brief ../brief.md
+store last-session LC
+store session $LC tier=standard router_reason='base: low confidence (0.79): fake selector: root'
+env NESS_TEST_ROUTER=0.8
+exec ness open --root --scope atc --brief ../brief.md
+store last-session AC
+store session $AC tier=frontier router_reason='fake selector: root'
+env NESS_TEST_ROUTER=
+env NESS_TEST_ROUTER_OFFSET=
+
+-- ness.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"
+-- tiers-bad.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"
+[tiers.frontier]
+claude = "best/medium"
+-- brief.md --
+b
+-- fakes-reset.json --
+{"missing":[],"outputs":{"claude --version":"2.1.294 (Claude Code)\n","codex --version":"codex-cli 0.162.1\n","codex debug models":"{\"models\":[{\"slug\":\"gpt-6-luna\"},{\"slug\":\"gpt-6.1-sol\"},{\"slug\":\"astra\"}]}\n"},"fail":{},"calls":[]}

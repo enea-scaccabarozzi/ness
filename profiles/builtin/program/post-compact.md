@@ -1,0 +1,1 @@
+- Re-read `docs/program/roadmap.md` (Autonomy, program doctrine), `docs/doctrine.md` and the last decision id in `docs/program/decisions.md`.

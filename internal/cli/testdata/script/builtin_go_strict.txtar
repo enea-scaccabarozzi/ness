@@ -1,0 +1,262 @@
+# go-strict renders the five skills, the lint configs, lefthook, the Makefile and the audit;
+# every slot renders into its file; the configs verify; the audit and the test lint reject the
+# fixtures the spec names; the shadowing check passes; the gate's steps include -count=4.
+# covers: R-BLT-001, R-BLT-002, R-BLT-050, R-BLT-053, R-BLT-054, R-BLT-055, R-BLT-057, R-BLT-058, R-BLT-059, R-BLT-060, R-BLT-061, R-BLT-071, R-QA-041
+[short] skip 'go-strict renders a Go module and lints it'
+[!exec:golangci-lint] skip 'golangci-lint is not on PATH'
+[!exec:python3] skip 'python3 is not on PATH'
+cd repo
+cp ../go.mod go.mod
+mkdir internal/p cmd/p
+cp ../p.go internal/p/p.go
+cp ../main.go cmd/p/main.go
+exec ness init --gate 'make validate' --base main --profile go-strict --yes
+! stdout conflict
+exec ness sync --check
+# R-BLT-058: with python3 missing from PATH, sync refuses (exit 4), names it, and changes nothing.
+mkdir ../nopy
+exec sh -c 'for t in ness git golangci-lint sh go make; do ln -s "$(command -v $t)" ../nopy/$t; done'
+exec sh -c 'echo "# edited" >> .ness/audit.toml'
+snap before
+env PATH_REAL=$PATH
+env PATH=$WORK/nopy
+exits 4 ness sync
+stderr python3
+samesnap before
+env PATH=$PATH_REAL
+exec sh -c 'sed -i "/^# edited$/d" .ness/audit.toml'
+exists .golangci.yml .golangci.tests.yml lefthook.yml Makefile .ness/audit.py .ness/audit.toml .ness/audit-exceptions.txt
+exists .agents/skills/ness-interface-design/SKILL.md
+exists .agents/skills/ness-test-strategy/SKILL.md
+exists .agents/skills/ness-test-discipline/SKILL.md
+exists .agents/skills/ness-documentation/SKILL.md
+exists .agents/skills/ness-compliance-check/SKILL.md
+grep 'local-prefixes: \[\]' .golangci.yml
+grep '^  go: "1.25"$' .golangci.yml
+grep '^test_file_lines = 400$' .ness/audit.toml
+grep '^  - invoke /ness-test-strategy$' .agents/skills/ness-entry/SKILL.md
+# Rendered: the lifecycle slots sit under Full session, not above it.
+exec sed -n '/^## Full session/,/^## Child/p' .agents/skills/ness-entry/SKILL.md
+stdout '^  - invoke /ness-test-strategy$'
+exec sed -n '1,/^## Full session/p' .agents/skills/ness-entry/SKILL.md
+! stdout 'invoke /ness-test-strategy'
+grep '^  - invoke /ness-interface-design$' .agents/skills/ness-entry/SKILL.md
+grep '^  - invoke /ness-compliance-check$' .agents/skills/ness-entry/SKILL.md
+grep '^  - invoke /ness-documentation$' .agents/skills/ness-entry/SKILL.md
+! grep 'ness:slot' .golangci.yml
+! grep 'ness:slot' .ness/audit.toml
+exec golangci-lint config verify
+exec golangci-lint config verify -c .golangci.tests.yml
+exec make -n validate
+stdout 'golangci-lint run --allow-serial-runners ./\.\.\.'
+stdout 'golangci-lint run --allow-serial-runners -c .golangci.tests.yml'
+stdout 'go test -count=4'
+stdout 'python3 .ness/audit.py'
+stdout 'ness sync --check'
+exits 1 ness doctor
+stdout '^ok\tskill-shadowing\t'
+stdout '^ok\tprofile-tools\t4 required tools present'
+# The audit: clean fixture passes; a 400-line test file fails; an owned exception passes; an
+# exception without a reason is refused.
+exec python3 .ness/audit.py
+exec sh -c 'printf "package p\n" > internal/p/big_test.go; yes "// x" | head -399 >> internal/p/big_test.go'
+exits 1 python3 .ness/audit.py
+stdout '^T400 internal/p/big_test.go: 400 lines'
+exec sh -c 'printf "T400 internal/p/big_test.go legacy suite, split when touched\n" >> .ness/audit-exceptions.txt'
+exec python3 .ness/audit.py
+exec sh -c 'printf "T400 internal/p/other_test.go\n" >> .ness/audit-exceptions.txt'
+exits 2 python3 .ness/audit.py
+stderr 'exception without a reason'
+exec sh -c 'sed -i "/other_test/d;/big_test/d" .ness/audit-exceptions.txt'
+rm internal/p/big_test.go
+# ForTest and a Clock interface are findings; a logger other than the configured one too.
+cp ../fortest.go internal/p/fortest.go
+exits 1 python3 .ness/audit.py
+stdout '^FORTEST internal/p/fortest.go'
+stdout '^CLOCK internal/p/fortest.go'
+stdout '^LIBS internal/p/fortest.go: go.uber.org/zap'
+rm internal/p/fortest.go
+# I2/M4/I3: a /v10 suffix and a sub-package still match; ForTest in a comment or WaitForTestServer
+# is no finding; testdata and _ directories are not packages.
+cp ../versioned.go internal/p/versioned.go
+exits 1 python3 .ness/audit.py
+stdout '^LIBS internal/p/versioned.go: github.com/go-playground/validator/v10'
+stdout '^LIBS internal/p/versioned.go: github.com/rs/zerolog/log'
+! stdout FORTEST
+rm internal/p/versioned.go
+mkdir internal/p/testdata internal/p/_x
+cp ../undoc.go internal/p/testdata/f.go
+cp ../undoc.go internal/p/_x/f.go
+exec python3 .ness/audit.py
+rm internal/p/testdata
+rm internal/p/_x
+# M6/M7: no .golangci.yml, an unknown rule and an unused exception.
+mv .golangci.yml ../gl.yml
+exits 2 python3 .ness/audit.py
+stderr 'golangci.yml'
+mv ../gl.yml .golangci.yml
+exec sh -c 'printf "T4OO internal/p/x.go typo\n" >> .ness/audit-exceptions.txt'
+exits 2 python3 .ness/audit.py
+stderr 'unknown rule T4OO'
+exec sh -c 'sed -i "/T4OO/d" .ness/audit-exceptions.txt; printf "T400 internal/p/gone_test.go removed long ago\n" >> .ness/audit-exceptions.txt'
+exits 1 python3 .ness/audit.py
+stdout '^EXCEPTION internal/p/gone_test.go: .*T400 matches no finding'
+exec sh -c 'sed -i "/gone_test/d" .ness/audit-exceptions.txt'
+exec python3 .ness/audit.py
+# Two When in a scenario, more than 10 steps, more than 5 example rows.
+mkdir features
+cp ../two_when.feature features/x.feature
+exits 1 python3 .ness/audit.py
+stdout '^FEATURE features/x.feature: scenario "two" has 2 When'
+rm features/x.feature
+# M5: examples across blocks add up, * steps count, Example: starts a scenario.
+cp ../rows.feature features/rows.feature
+cp ../steps.feature features/steps.feature
+exits 1 python3 .ness/audit.py
+stdout '^FEATURE features/rows.feature: scenario "rows" has 6 example rows'
+stdout '^FEATURE features/steps.feature: scenario "steps" has 11 steps'
+! stdout 'features/rows.feature: scenario "ok"'
+rm features
+# The test lint: time.Sleep fails it.
+cp ../sleep_test.go internal/p/sleep_test.go
+exits 1 golangci-lint run --allow-serial-runners -c .golangci.tests.yml ./...
+stdout 'time.Sleep'
+rm internal/p/sleep_test.go
+# documentation: an export without a doc comment fails lint; the clean fixture passes.
+cp ../undoc.go internal/p/undoc.go
+exits 1 golangci-lint run --allow-serial-runners ./...
+stdout 'exported'
+rm internal/p/undoc.go
+exec golangci-lint run --allow-serial-runners ./...
+# Slots render into the files; a Go version below 1.25 is refused by the audit.
+exec sh -c 'sed -i "s/^profiles = .*/profiles = [\"go-strict\", \"local\"]/" .ness/ness.toml'
+exec ness sync
+grep 'local-prefixes: \[example.com/p\]' .golangci.yml
+grep '^  go: "1.24"$' .golangci.yml
+grep '^test_file_lines = 300$' .ness/audit.toml
+grep '^composition_roots = \["cmd", "internal/wire"\]$' .ness/audit.toml
+exits 2 python3 .ness/audit.py
+stderr 'go version 1.24 is below 1.25'
+# M8: an excluded directory does not exclude a sibling that shares its name prefix.
+exec sh -c 'sed -i "s/\"1.24\"/\"1.25\"/" .golangci.yml'
+mkdir internal/pkg
+cp ../pkg.go internal/pkg/pkg.go
+exec sh -c 'printf "package p\n" > internal/p/big_test.go; yes "// x" | head -399 >> internal/p/big_test.go; cp internal/p/big_test.go internal/pkg/big_test.go'
+exits 1 python3 .ness/audit.py
+stdout '^T400 internal/pkg/big_test.go'
+! stdout 'internal/p/big_test.go'
+
+-- go.mod --
+module example.com/p
+
+go 1.27
+-- p.go --
+// Package p is the fixture package of the go-strict script.
+package p
+
+// Answer is the fixture export.
+func Answer() int { return 42 }
+-- main.go --
+// Command p is the fixture composition root.
+package main
+
+import "example.com/p/internal/p"
+
+func main() { _ = p.Answer() }
+-- versioned.go --
+package p
+
+import (
+	"github.com/go-playground/validator/v10"
+	"github.com/rs/zerolog/log"
+)
+
+// ResetForTest in a comment is no declaration.
+func WaitForTestServer() { _, _ = validator.New, log.Print }
+-- rows.feature --
+Feature: x
+  Scenario Outline: rows
+    Given a <n>
+    When b
+    Then c
+    Examples:
+      | n |
+      | 1 |
+      | 2 |
+      | 3 |
+    Examples:
+      | n |
+      | 4 |
+      | 5 |
+      | 6 |
+  Example: ok
+    Given a
+    When b
+    Then c
+-- steps.feature --
+Feature: x
+  Rule: r
+    Example: steps
+      Given a
+      * a
+      * a
+      * a
+      * a
+      * a
+      * a
+      * a
+      * a
+      When b
+      Then c
+-- pkg.go --
+// Package pkg is a sibling of the excluded package.
+package pkg
+-- fortest.go --
+package p
+
+import "go.uber.org/zap"
+
+// Clock is what the audit refuses: pass now as a value.
+type Clock interface{ Now() int }
+
+// ResetForTest is a test hook in production code.
+func ResetForTest() { _ = zap.String }
+-- two_when.feature --
+Feature: x
+  Scenario: two
+    Given a
+    When b
+    When c
+    Then d
+-- sleep_test.go --
+package p
+
+import (
+	"testing"
+	"time"
+)
+
+func TestSleep(t *testing.T) { time.Sleep(time.Millisecond) }
+-- undoc.go --
+package p
+
+func Undocumented() {}
+-- repo/.ness/profiles/local/profile.toml --
+name = "local"
+[slots]
+".golangci.yml#module-path" = { set = "module-path.md" }
+".golangci.yml#go-version" = { set = "go-version.md" }
+".ness/audit.toml#ceilings" = { set = "ceilings.md" }
+".ness/audit.toml#composition-roots" = { set = "roots.md" }
+".ness/audit.toml#excluded-packages" = { set = "excluded.md" }
+-- repo/.ness/profiles/local/module-path.md --
+      local-prefixes: [example.com/p]
+-- repo/.ness/profiles/local/go-version.md --
+  go: "1.24"
+-- repo/.ness/profiles/local/ceilings.md --
+[ceilings]
+test_file_lines = 300
+-- repo/.ness/profiles/local/excluded.md --
+excluded_packages = ["internal/p"]
+-- repo/.ness/profiles/local/roots.md --
+composition_roots = ["cmd", "internal/wire"]

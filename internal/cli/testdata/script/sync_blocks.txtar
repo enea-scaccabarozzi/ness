@@ -1,0 +1,101 @@
+# Blocks are appended after the user's text, found and updated wherever moved, conflict at file
+# granularity, and malformed markers leave the file alone while other files still sync.
+# covers: R-SYNC-041, R-SYNC-042, R-SYNC-045, R-SYNC-046, R-SYNC-060, R-PROF-014
+cd repo
+exec ness sync
+grep '\A# Mine\n\nhello\n\n<!-- ness:begin core/router -->\n' AGENTS.md
+grep 'Rules v1\.\n<!-- ness:end local/rules -->\n\z' AGENTS.md
+grep -count=2 'ness:begin' AGENTS.md
+# Moved to the top and updated in place.
+cp ../moved.md AGENTS.md
+cp ../rules2.md .ness/profiles/local/rules.md
+exec ness sync
+stdout '^update AGENTS.md#local/rules$'
+cmp AGENTS.md ../moved-v2.md
+# An edit inside a block whose upstream changed: the file is untouched, the render goes beside it.
+cp ../edited.md AGENTS.md
+cp ../rules3.md .ness/profiles/local/rules.md
+exits 3 ness sync
+cmp AGENTS.md ../edited.md
+exists AGENTS.md.ness-new
+grep 'Rules v3\.' AGENTS.md.ness-new
+exec ness sync --keep AGENTS.md
+# Malformed markers: AGENTS.md is left alone, docs/x.md still syncs.
+cp ../broken.md AGENTS.md
+cp ../x2.md .ness/profiles/local/x.md
+exits 1 ness sync
+stderr 'AGENTS.md: line 1: block "core/router" has no end marker'
+cmp AGENTS.md ../broken.md
+cmp docs/x.md ../x2.md
+
+-- repo/.ness/ness.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"
+profiles = ["local"]
+-- repo/.ness/profiles/local/profile.toml --
+name = "local"
+[slots]
+"AGENTS.md#rules" = { block = "rules.md" }
+[files]
+"docs/x.md" = { own = "x.md" }
+-- repo/.ness/profiles/local/rules.md --
+Rules v1.
+-- repo/.ness/profiles/local/x.md --
+x1
+-- repo/AGENTS.md --
+# Mine
+
+hello
+-- rules2.md --
+Rules v2.
+-- rules3.md --
+Rules v3.
+-- x2.md --
+x2
+-- moved.md --
+<!-- ness:begin core/router -->
+## Sessions (ness)
+Applies only when the `ness` command exists in this checkout. Otherwise ignore this block.
+
+This repository runs the ness harness. Start every session by loading the `ness-entry` skill.
+<!-- ness:end core/router -->
+# Mine
+
+hello
+
+<!-- ness:begin local/rules -->
+Rules v1.
+<!-- ness:end local/rules -->
+-- moved-v2.md --
+<!-- ness:begin core/router -->
+## Sessions (ness)
+Applies only when the `ness` command exists in this checkout. Otherwise ignore this block.
+
+This repository runs the ness harness. Start every session by loading the `ness-entry` skill.
+<!-- ness:end core/router -->
+# Mine
+
+hello
+
+<!-- ness:begin local/rules -->
+Rules v2.
+<!-- ness:end local/rules -->
+-- edited.md --
+<!-- ness:begin core/router -->
+## Sessions (ness)
+Applies only when the `ness` command exists in this checkout. Otherwise ignore this block.
+
+This repository runs the ness harness. Start every session by loading the `ness-entry` skill.
+<!-- ness:end core/router -->
+# Mine
+
+hello
+
+<!-- ness:begin local/rules -->
+Rules v2, with my own line.
+<!-- ness:end local/rules -->
+-- broken.md --
+<!-- ness:begin core/router -->
+text

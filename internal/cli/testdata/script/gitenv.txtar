@@ -1,0 +1,26 @@
+# A stray GIT_DIR and GIT_WORK_TREE in ness's environment (a hook run from another repository)
+# redirect neither the project lookup, nor the store, nor the git commands of a launch: they all
+# stay in the checkout ness runs in. The other repository has no commits, so any git command
+# that reached it would fail.
+# covers: R-QA-021, R-MSG-001
+exec git init -q other
+cd repo
+exec ness init --gate true --base main --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+mkdir sub
+cd sub
+exec sh -c 'GIT_DIR=$WORK/other/.git GIT_WORK_TREE=$WORK/other ness open --root --scope prog --tier standard --brief ../../b.md'
+stdout '^opened s-[0-9a-f]{12} scope prog '
+# GIT_DIR alone would make git take the current directory as the top of the checkout.
+exec sh -c 'GIT_DIR=$WORK/other/.git ness open --root --scope two --tier standard --brief ../../b.md'
+stdout '^opened s-[0-9a-f]{12} scope two '
+cd ..
+store sessions 2
+exec git worktree list
+stdout 'repo/\.worktrees/prog-[0-9a-f]{12}'
+! exists ../other/.git/ness
+exec git -C ../other worktree list
+! stdout prog
+-- b.md --
+b

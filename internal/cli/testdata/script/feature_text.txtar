@@ -1,0 +1,31 @@
+# A feature's skill text is rendered only while the feature is on; the probes text carries the
+# sizing guidance and the worker-restart note; notify and contracts name their commands.
+# covers: R-BLT-004
+cd repo
+exec ness init --gate true --base main --yes
+! exists .agents/skills/ness-probes/SKILL.md
+! exists .agents/skills/ness-notify/SKILL.md
+! exists .agents/skills/ness-contracts/SKILL.md
+exec sh -c 'printf "features = [\"probes\", \"notify\", \"contracts\"]\n" >> .ness/ness.toml'
+exec ness sync
+grep '^name: ness-probes$' .agents/skills/ness-probes/SKILL.md
+grep '^## Sizing a probe' .agents/skills/ness-probes/SKILL.md
+grep 'positive control' .agents/skills/ness-probes/SKILL.md
+grep 'Raise `sample`' .agents/skills/ness-probes/SKILL.md
+grep 'Skip the floor' .agents/skills/ness-probes/SKILL.md
+grep '`jitter`' .agents/skills/ness-probes/SKILL.md
+grep 'restart the worker' .agents/skills/ness-probes/SKILL.md
+grep '^name: ness-monitor$' .agents/skills/ness-monitor/SKILL.md
+exists .agents/skills/ness-monitor/references/example-prod-week.md
+grep '^name: ness-notify$' .agents/skills/ness-notify/SKILL.md
+grep 'ness post --channel NAME --file NOTE.md' .agents/skills/ness-notify/SKILL.md
+grep 'restart the worker' .agents/skills/ness-notify/SKILL.md
+grep '^name: ness-contracts$' .agents/skills/ness-contracts/SKILL.md
+grep 'ness contract freeze' .agents/skills/ness-contracts/SKILL.md
+exec sh -c 'sed -i "/^features = /d" .ness/ness.toml'
+exec ness sync
+! exists .agents/skills/ness-probes/SKILL.md
+! exists .agents/skills/ness-notify/SKILL.md
+! exists .agents/skills/ness-contracts/SKILL.md
+! exists .agents/skills/ness-monitor/SKILL.md
+! exists .agents/skills/ness-monitor/references/example-prod-week.md

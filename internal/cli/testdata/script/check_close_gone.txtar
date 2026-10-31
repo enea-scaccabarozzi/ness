@@ -1,0 +1,40 @@
+# A session whose worktree directory is gone can still close when a close check is declared: the
+# checks have nothing to examine, so they are skipped (even a check that would fail) and the close
+# output says so.
+# covers: R-CHK-004, R-SESS-065
+cd repo
+exec ness init --gate true --base main --yes
+cp ../ness.toml .ness/ness.toml
+mkdir .ness/profiles/local
+cp ../profile.toml .ness/profiles/local/profile.toml
+exec ness sync
+exec git add -A
+exec git commit -q -m 'ness init'
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+exec sh -c 'cd .worktrees/r-* && printf "## Lessons\\nNone.\\n" > docs/sessions/r/report.md && git add -A && git commit -q -m r && NESS_SESSION=$R ness integrate --subject "feat: r"'
+exec sh -c 'rm -rf .worktrees/r-*'
+exec sh -c 'ness close $R 2>&1'
+stdout 'closed'
+stdout 'close checks .*skipped'
+! stdout 'local/always-fails'
+store session $R closed=true
+
+-- ness.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"
+profiles = ["local"]
+-- profile.toml --
+name = "local"
+
+[[checks]]
+id      = "always-fails"
+on      = "close"
+skill   = "ness-entry"
+section = "Communicate"
+message = "Never passes."
+run     = 'echo never; exit 3'
+-- b.md --
+b

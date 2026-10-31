@@ -1,0 +1,47 @@
+# --resume of a session whose ready mark is set but whose prompt may not have gone in (phase
+# starting-agent..sending-brief): a live client continues the launch (prompt submitted, same run);
+# a dead client is a new run with the prompt submitted once more; from waiting-ready on a live
+# client is simply running and gets nothing.
+# covers: R-SESS-025, R-SESS-033, R-SESS-047
+cd repo
+exec ness init --gate true --base main --yes
+cp ../ness.toml .ness/ness.toml
+exec git add -A
+exec git commit -q -m 'ness init'
+exec ness open --root --scope prog --tier standard --brief ../brief.md
+store last-session R
+fake herdr prompted 1
+# Mark set, prompt pending, client alive: the launch continues in the same run.
+store phase $R sending-brief
+exec ness status
+stdout 'stalled launch|sending-brief'
+! stdout '\tready\t'
+exec ness open --resume $R
+stdout '^resumed s-[0-9a-f]{12} run 1$'
+store session $R phase=ready run=1
+fake herdr prompted 2
+fake herdr tabs 1
+# Mark set, prompt pending, client dead: a new run, one prompt for it.
+store phase $R sending-brief
+fake herdr exit p-prog
+exec ness open --resume $R
+stdout '^resumed s-[0-9a-f]{12} run 2 '
+store session $R phase=ready run=2
+fake herdr prompted 3
+# From waiting-ready on, a live client is running: refused, nothing submitted.
+store phase $R waiting-ready
+exits 4 ness open --resume $R
+stderr 'running'
+fake herdr prompted 3
+store session $R run=2
+
+-- ness.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"
+sessions = "rec"
+[launch]
+ready_timeout = "300ms"
+-- brief.md --
+Do the thing.

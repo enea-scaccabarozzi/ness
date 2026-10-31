@@ -1,0 +1,97 @@
+# A project-defined format ([contracts.formats.NAME]: match globs and a units command) freezes a
+# file unit by unit: the command prints {"id","body"} lines, new units pass, a changed or removed
+# unit fails naming it, an extractor that fails or repeats an id fails closed. The extractor runs
+# from an export of the merge-base, so editing it on the branch changes nothing. The hook warns on a
+# format file. A format the branch adds to its own ness.toml is ignored (R-CTR-046). amend and a new
+# freeze reopen and relock a unit file.
+# covers: R-CTR-047, R-CTR-048, R-CTR-049, R-CTR-050, R-CTR-051, R-CTR-052, R-CTR-053, R-CTR-054
+cd repo
+exec ness init --gate true --base main --yes
+exec sh -c 'printf "features = [\"contracts\"]\n[contracts]\nfrozen = [\"proj/*.fmt\"]\n[contracts.formats.tests]\nmatch = [\"specs/*.fmt\"]\nunits = \"tools/units.sh\"\n[contracts.formats.proj]\nmatch = [\"proj/*.fmt\"]\nunits = \"tools/punits.sh\"\n" >> .ness/ness.toml'
+exec sh -c 'mkdir -p tools specs proj notes && cp ../units.sh tools/units.sh && cp ../units.sh tools/punits.sh && chmod +x tools/units.sh tools/punits.sh'
+exec sh -c 'cp ../a.fmt specs/a.fmt && cp ../p.fmt proj/p.fmt && cp ../a.fmt notes/n.fmt'
+exec git add -A
+exec git commit -q -m 'ness init'
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+exec ness send --to $R --body 'approved: amend specs/a.fmt'
+store last $R IR
+env NESS_SESSION=$R
+# freeze records the format and a digest per unit.
+exec sh -c 'cd .worktrees/r-* && ness contract freeze specs/a.fmt'
+stdout 'frozen specs/a\.fmt in'
+exec sh -c 'cd .worktrees/r-* && grep -c "^fmt:tests:[0-9a-f]\{64\} specs/a.fmt$" docs/sessions/r/contract.lock'
+stdout '^1$'
+exec sh -c 'cd .worktrees/r-* && grep -c "^scenario [0-9a-f]\{64\} specs/a.fmt	" docs/sessions/r/contract.lock'
+stdout '^2$'
+exec sh -c 'cd .worktrees/r-* && git add -A && git commit -q -m freeze && ness contract check'
+stdout '^ok\t2 frozen files$'
+# A new unit passes; a changed unit fails, named; a removed unit fails, named.
+exec sh -c 'cd .worktrees/r-* && printf "unit c: three\n" >> specs/a.fmt && ness contract check'
+exec sh -c 'cd .worktrees/r-* && git checkout -- specs/a.fmt && sed -i "s/unit b: two/unit b: TWO/" specs/a.fmt'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stdout '^differs\tspecs/a\.fmt\tdocs/sessions/r/contract\.lock\tunit "b" changed$'
+exec sh -c 'cd .worktrees/r-* && git checkout -- specs/a.fmt && sed -i "/unit a:/d" specs/a.fmt'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stdout '^differs\tspecs/a\.fmt\tdocs/sessions/r/contract\.lock\tunit "a" removed$'
+# An extractor that exits 1, or repeats an id, fails closed.
+exec sh -c 'cd .worktrees/r-* && printf "#fail\n" > specs/a.fmt'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stdout '^differs\tspecs/a\.fmt\t.*boom'
+exec sh -c 'cd .worktrees/r-* && printf "#dup\n" > specs/a.fmt'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stdout '^differs\tspecs/a\.fmt\t.*repeats id "a"'
+exec sh -c 'cd .worktrees/r-* && git checkout -- specs/a.fmt'
+# The extractor edited on the branch is not the one that runs.
+exec sh -c 'cd .worktrees/r-* && printf "exit 1\n" >> tools/units.sh && ness contract check'
+stdout '^ok'
+exec sh -c 'cd .worktrees/r-* && git checkout -- tools/units.sh'
+# Project-wide: the glob's file is locked unit by unit against base.
+exec sh -c 'cd .worktrees/r-* && printf "unit y: added\n" >> proj/p.fmt && ness contract check'
+exec sh -c 'cd .worktrees/r-* && git checkout -- proj/p.fmt && sed -i "s/unit x: ex/unit x: why/" proj/p.fmt'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stdout '^differs\tproj/p\.fmt\t\.ness/ness\.toml\tunit "x" changed$'
+exec sh -c 'cd .worktrees/r-* && git checkout -- proj/p.fmt'
+exits 4 sh -c 'cd .worktrees/r-* && ness contract freeze proj/p.fmt'
+stderr 'frozen project-wide'
+# The hook warns on a format file.
+stdin ../edit-fmt.json
+exec sh -c 'cd .worktrees/r-* && ness hook pre-tool'
+stdout 'specs/a\.fmt is locked'
+stdin ../edit-pfmt.json
+exec sh -c 'cd .worktrees/r-* && ness hook pre-tool'
+stdout 'proj/p\.fmt is locked project-wide'
+# A format the branch adds to its own ness.toml is ignored: the file freezes whole-file.
+exec sh -c 'cd .worktrees/r-* && printf "[contracts.formats.mine]\nmatch = [\"notes/*.fmt\"]\nunits = \"true\"\n" >> .ness/ness.toml'
+exec sh -c 'cd .worktrees/r-* && ness contract freeze notes/n.fmt'
+exec sh -c 'cd .worktrees/r-* && grep -c "^[0-9a-f]\{40\} notes/n.fmt$" docs/sessions/r/contract.lock'
+stdout '^1$'
+exec sh -c 'cd .worktrees/r-* && git checkout -- .ness/ness.toml docs/sessions/r/contract.lock'
+# amend and freeze again: the reason is logged, the new units are locked.
+env NESS_TEST_NOW=2026-10-09T10:00:00Z
+exec sh -c 'cd .worktrees/r-* && ness contract amend specs/a.fmt --reason "b was wrong" --item $IR'
+exec sh -c 'cd .worktrees/r-* && sed -i "s/unit b: two/unit b: TWO/" specs/a.fmt && ness contract check'
+exec sh -c 'cd .worktrees/r-* && ness contract freeze specs/a.fmt && sed -i "s/unit b: TWO/unit b: 2/" specs/a.fmt'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stdout 'unit "b" changed'
+
+-- b.md --
+b
+-- units.sh --
+#!/bin/sh
+# Every stdin line "unit ID: BODY" is a unit. "#fail" exits 1, "#dup" repeats an id.
+in=$(cat)
+case $in in
+*'#fail'*) echo "boom" >&2; exit 1 ;;
+*'#dup'*) printf '{"id":"a","body":"1"}\n{"id":"a","body":"2"}\n'; exit 0 ;;
+esac
+printf '%s\n' "$in" | sed -n 's/^unit \([^:]*\): \(.*\)$/{"id":"\1","body":"\2"}/p'
+-- a.fmt --
+unit a: one
+unit b: two
+-- p.fmt --
+unit x: ex
+-- edit-fmt.json --
+{"tool_name":"Edit","tool_input":{"file_path":"specs/a.fmt"}}
+-- edit-pfmt.json --
+{"tool_name":"Edit","tool_input":{"file_path":"proj/p.fmt"}}

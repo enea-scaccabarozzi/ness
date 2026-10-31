@@ -1,0 +1,14 @@
+{
+  "autoCompactWindow": 265000,
+  "env": {
+    "CLAUDE_CODE_SUBAGENT_MODEL": "sonnet"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {"hooks":[{"command":"command -v ness >/dev/null || exit 0; ness hook pre-tool","type":"command"}]}
+    ],
+    "SessionStart": [
+      {"hooks":[{"command":"command -v ness >/dev/null || exit 0; ness hook session-start","type":"command"}]}
+    ]
+  }
+}

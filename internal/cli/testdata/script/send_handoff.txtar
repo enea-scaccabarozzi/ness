@@ -1,0 +1,60 @@
+# ness send --intent handoff: the body needs the Done, Now and Next headings like a checkpoint.
+# A refusal names only the missing ones, ends with the rule's place, and creates nothing; a
+# complete body is delivered, a repeat is the same item; other intents need no headings.
+# covers: R-MSG-070, R-MSG-065
+cd repo
+exec ness init --gate true --base main --yes
+store add-session s-aaaaaaaaaaaa root
+store add-session s-bbbbbbbbbbbb child-b s-aaaaaaaaaaaa
+env NESS_SESSION=s-bbbbbbbbbbbb
+exits 2 ness send --to manager --intent handoff --body 'done, see report.md'
+stderr 'Done'
+stderr 'Now'
+stderr 'Next'
+stderr 'skill ness-entry, section Communicate'
+exits 2 ness send --to manager --intent handoff --body @../partial.md
+stderr 'Next'
+! stderr 'Done'
+! stderr 'Now'
+stderr 'skill ness-entry, section Communicate'
+store items s-aaaaaaaaaaaa 0
+# A fenced heading is not a heading.
+exits 2 ness send --to manager --intent handoff --body @../fenced.md
+stderr 'Now'
+store items s-aaaaaaaaaaaa 0
+# A complete body is delivered; the same content again is the same item.
+exec ness send --to manager --intent handoff --body @../full.md
+stdout '^sent m-[a-z2-7]{8} to '
+store items s-aaaaaaaaaaaa 1
+exec ness send --to manager --intent handoff --body @../full.md
+stdout '^already sent m-[a-z2-7]{8}$'
+store items s-aaaaaaaaaaaa 1
+# The headings belong to a handoff alone.
+exec ness send --to manager --intent fyi --body 'just words'
+exec ness send --to manager --intent request --body 'more words'
+store items s-aaaaaaaaaaaa 3
+# A manager's handoff down to a child is held to the same rule.
+env NESS_SESSION=s-aaaaaaaaaaaa
+exits 2 ness send --to s-bbbbbbbbbbbb --intent handoff --body 'build y'
+stderr 'skill ness-entry, section Communicate'
+store items s-bbbbbbbbbbbb 0
+
+-- full.md --
+## Done
+the parser
+## Now
+tests
+## Next
+wiring
+-- partial.md --
+## Done
+the parser
+## Now
+tests
+-- fenced.md --
+## Done
+x
+```
+## Now
+## Next
+```

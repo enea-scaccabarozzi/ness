@@ -1,0 +1,54 @@
+# A failing gate leaves the target unchanged, pushes nothing, records nothing, exits non-zero,
+# and the throwaway worktree is removed even when the gate dirtied it; a conflicting fold names
+# the path; the squash mode lands one commit.
+# covers: R-SESS-092, R-SESS-093, R-SESS-095, R-SESS-097
+cd repo
+exec ness init --gate 'echo junk > junk.txt && false' --base main --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+exec sh -c 'cd .worktrees/r-* && echo a > a.txt && git add -A && git commit -q -m a'
+exec git rev-parse main
+cp stdout ../main-before
+exec sh -c 'cd .worktrees/r-* && NESS_SESSION=$R ness integrate --subject "feat: x"; echo "exit $?"'
+stdout 'exit 1'
+exec git rev-parse main
+cmp stdout ../main-before
+store session $R integrated=
+exec git worktree list
+! stdout 'ness/tmp-'
+! exists .git/ness/tmp-$R
+# A conflict: main changed the same file; the session switches to squash with a passing gate.
+exec sh -c 'echo b > a.txt && git add a.txt && git commit -q -m b'
+exec git rev-parse main
+cp stdout ../main-2
+exec sh -c 'cd .worktrees/r-* && cp ../../../squash.toml .ness/ness.toml && git add -A && git commit -q -m squash'
+exec sh -c 'cd .worktrees/r-* && NESS_SESSION=$R ness integrate --subject "feat: x"; echo "exit $?"'
+stdout 'exit 1'
+stderr 'a\.txt'
+exec git rev-parse main
+cmp stdout ../main-2
+store session $R integrated=
+# Resolved in the session branch, the squash lands exactly one commit with the trailer.
+exec sh -c 'cd .worktrees/r-* && (git merge -q --no-edit main >/dev/null 2>&1 || (git checkout --theirs a.txt && git add a.txt && git -c core.editor=true commit -q --no-edit))'
+exec git rev-list --count main
+cp stdout ../n-before
+exec sh -c 'cd .worktrees/r-* && NESS_SESSION=$R ness integrate --subject "feat: x"'
+stdout 'into main at'
+exec sh -c 'echo $(( $(cat ../n-before) + 1 ))'
+cp stdout ../n-want
+exec git rev-list --count main
+cmp stdout ../n-want
+exec git log -1 --format=%B main
+stdout 'Ness-Integrates: [0-9a-f]{40}'
+
+-- b.md --
+b
+-- squash.toml --
+ness = "0.1"
+project = "repo"
+base = "main"
+gate = "true"
+[integrate]
+mode = "squash"

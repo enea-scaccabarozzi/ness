@@ -1,0 +1,13 @@
+# want: require
+name = "local"
+
+[[checks]]
+id = "c1"
+on = "open"
+skill = "ness-entry"
+section = "Communicate"
+message = "fix it"
+kind = "section-matches"
+file = "docs/a.md"
+heading = "Autonomy"
+require = ["(unclosed"]

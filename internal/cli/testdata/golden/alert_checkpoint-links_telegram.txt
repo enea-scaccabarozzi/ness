@@ -1,0 +1,6 @@
+🟢 <b>Checkpoint</b> · example-lab
+<b><a href="https://claude.ai/code/session_01AbC">weekly-review-plan</a></b>
+
+Rung two: re-score the cells.
+
+<a href="https://claude.ai/x">📄 Open the page</a>

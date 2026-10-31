@@ -1,0 +1,30 @@
+# The worktree directory was deleted by hand: close prunes and still succeeds; the root's tab stays.
+# covers: R-SESS-065, R-SESS-061, R-SESS-122
+cd repo
+exec ness init --gate true --base main --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+exec sh -c 'cd .worktrees/r-* && printf "## Lessons\nNone.\n" > docs/sessions/r/report.md && git add -A && git commit -q -m r && NESS_SESSION=$R ness integrate --subject "feat: x"'
+exec sh -c 'rm -rf .worktrees/r-*'
+exec ness close $R
+stdout 'closed'
+store session $R closed=true
+exec git worktree list
+! stdout 'worktrees/'
+fake herdr tabs 1
+# Gone worktree and no report on the branch: refused, --discard included (R-SESS-061).
+exec ness open --root --scope x --tier standard --brief ../b.md
+store last-session X
+exec sh -c 'cd .worktrees/x-* && echo w > w.txt && git add -A && git commit -q -m w && NESS_SESSION=$X ness integrate --subject "feat: x"'
+exec sh -c 'rm -rf .worktrees/x-*'
+exits 4 ness close $X
+stderr 'no report\.md committed on branch session/x-'
+stderr 'skill ness-[a-z-]+, section [A-Z]'
+exits 4 ness close $X --discard
+stderr 'no report\.md committed on branch'
+store session $X closed=false
+
+-- b.md --
+b

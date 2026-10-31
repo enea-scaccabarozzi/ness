@@ -1,0 +1,249 @@
+# Doctor reports each check as ok, warn or fail on one line with a fix command on every fail,
+# completes all checks when several fail, never applies a fix, exits 1 on any fail and 0 with
+# only warnings, and --json carries name, status and fix per check. Pin mismatch names both
+# versions and the path; the worker unit's ExecStart is compared with the running binary;
+# untested client and herdr versions fail; a tier id the client cannot resolve names its row
+# (Codex: missing from codex debug models); a shadowing skill names both paths; a profile tool
+# missing from PATH names the tool and the profile; the operator channel is a warning when
+# unset, ok naming channel and kind, a failure when its token is not exported.
+# covers: R-DOC-001, R-DOC-002, R-DOC-003, R-DOC-004, R-DOC-005, R-DOC-006, R-DOC-007, R-DOC-008, R-DOC-009, R-DOC-017, R-DOC-020, R-DOC-021, R-DOC-024, R-SESS-016, R-CFG-037
+cd repo
+exec ness init --gate true --base main --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+# Doctor never creates the store (R-DOC-001).
+! exists .git/ness
+env NESS_TEST_NOW=2026-10-08T10:00:00Z
+# No store yet: the store checks say so, the worker is not running, and nothing is created.
+exits 1 ness doctor
+stdout '^fail\tworker\tnot running'
+stdout '^ok\tdead-routes\tno store yet'
+stdout '^ok\tgone-panes\tno store yet'
+! exists .git/ness
+# All green: a unit pointing at this binary, a fresh heartbeat, a systemd user session.
+store heartbeat 5 0.1.0
+exec sh -c 'which ness'
+cp stdout ../nesspath
+exec sh -c 'mkdir -p $HOME/.config/systemd/user && printf "[Service]\nExecStart=%s worker run\n" "$(cat ../nesspath)" > $HOME/.config/systemd/user/ness-repo.service'
+exec ness doctor
+stdout '^ok\tbinary\t0\.1\.0 .*pin 0\.1'
+stdout '^ok\thooks-binary\t'
+stdout '^ok\tworker-binary\t'
+stdout '^ok\therdr-version\t0\.8\.2'
+stdout '^ok\tclient-version\tclaude 2\.1\.294'
+stdout '^ok\ttier-models\t'
+stdout '^ok\tskill-shadowing\t'
+stdout '^ok\tprofile-tools\t'
+stdout '^ok\tworker\t'
+stdout '^ok\tsystemd\t'
+stdout '^ok\tsync-drift\t'
+stdout '^warn\toperator-notify\tnone configured: the operator is not told when a session needs them\tfix: '
+! stdout '^fail'
+exec sh -c 'ness doctor --json | sed -e "s#/[^ \",]*/ness#PATH#g" -e "s#/[^ \",]*/\.home#HOME#g" > ../got.json'
+cmp ../got.json ../golden.json
+# Every check fails at once; each line carries a fix; the tree and refs are untouched.
+env NESS_TEST_VERSION=0.2.0
+exec sh -c 'printf "[Service]\nExecStart=/usr/local/bin/other-ness worker run\n" > $HOME/.config/systemd/user/ness-repo.service'
+fake herdr version 0.5.0
+fake output 'claude --version' '1.0.0 (Claude Code)'
+cp ../bad.toml .ness/ness.toml
+mkdir $HOME/.claude/skills/deploy
+mkdir .agents/skills/deploy
+mkdir ../elsewhere/linked
+symlink .agents/skills/linked -> ../../../elsewhere/linked
+mkdir $HOME/.claude/skills/linked
+snap before
+exec git for-each-ref
+cp stdout ../refs-before
+exits 1 ness doctor
+stdout '^fail\tbinary\t.*0\.2\.0.*0\.1.*ness.*\tfix: '
+stdout '^fail\tworker-binary\t.*/usr/local/bin/other-ness.*\tfix: ness worker install'
+stdout '^fail\therdr-version\t0\.5\.0.*0\.8\.2\tfix: '
+stdout '^fail\tclient-version\tclaude 1\.0\.0.*2\.1\.294\tfix: '
+stdout '^fail\ttier-models\ttier frontier \(claude = "bogus"\).*\tfix: '
+stdout '^fail\tskill-shadowing\t.*\.claude/skills/deploy.*\.agents/skills/deploy.*\tfix: '
+stdout '^fail\tprofile-tools\t.*nonexistent-tool-xyz.*local.*\tfix: '
+stdout '^fail\tskill-shadowing\t.*\.claude/skills/linked.*\.agents/skills/linked'
+stdout '^fail\toperator-notify\tphone: channel phone: token: PHONE_TOKEN is not set.*\tfix: see the secrets check'
+stdout '^fail\tsecrets\tnotify.channels.phone.token: env:PHONE_TOKEN missing\tfix: export PHONE_TOKEN$'
+env PHONE_TOKEN=123:abc
+exits 1 ness doctor
+stdout '^ok\toperator-notify\tphone \(telegram\)$'
+! stdout '123:abc'
+env PHONE_TOKEN=
+# The hooks resolve a different ness first on PATH.
+mkdir ../fakebin
+exec sh -c 'printf "#!/bin/sh\n" > ../fakebin/ness; chmod +x ../fakebin/ness'
+exits 1 sh -c 'PATH=$WORK/fakebin:$PATH "$(cat ../nesspath)" doctor'
+stdout '^fail\thooks-binary\t.*fakebin/ness.*\tfix: '
+stdout -count=1 '^(ok|warn|fail)\tbinary\t'
+samesnap before
+exec git for-each-ref
+cmp stdout ../refs-before
+fake herdr tabs 0
+# Only warnings exit 0: no unit installed is a warning.
+env NESS_TEST_VERSION=0.1.0
+rm $HOME/.config/systemd/user/ness-repo.service
+exec sh -c 'cp ../ness-codex.toml .ness/ness.toml; rm -r $HOME/.claude/skills/deploy $HOME/.claude/skills/linked .agents/skills/deploy .agents/skills/linked'
+# The codex client adds sync-owned keys; sync them so sync-drift stays quiet.
+exec ness sync
+fake herdr version 0.8.2
+fake output 'codex --version' 'codex-cli 0.162.1'
+fake output 'codex debug models' '{"models":[{"slug":"gpt-6-luna"},{"slug":"gpt-6.1-sol"},{"slug":"astra"}]}'
+exec ness doctor
+stdout '^warn\tworker-binary\tno unit .*\tfix: ness worker install'
+stdout '^ok\tclient-version\tcodex 0\.162\.1'
+# Codex ids are checked against codex debug models when the client is codex.
+fake output 'codex debug models' '{"models":[{"slug":"gpt-6-luna"}]}'
+exits 1 ness doctor
+stdout '^fail\ttier-models\ttier apex \(codex = "astra"\).*\tfix: '
+
+-- bad.toml --
+ness = "0.1"
+project = "repo"
+base = "main"
+gate = "true"
+profiles = ["local"]
+features = ["notify"]
+
+[notify]
+operator = "phone"
+
+[notify.channels.phone]
+kind = "telegram"
+token = "env:PHONE_TOKEN"
+chat_id = "42"
+
+[tiers.frontier]
+claude = "bogus/high"
+-- ness-codex.toml --
+ness = "0.1"
+project = "repo"
+base = "main"
+gate = "true"
+experimental = ["codex"]
+client = "codex"
+-- repo/.ness/profiles/local/profile.toml --
+name = "local"
+requires_tools = ["nonexistent-tool-xyz"]
+-- golden.json --
+{
+  "schema": 1,
+  "version": "0.1.0",
+  "checks": [
+    {
+      "name": "binary",
+      "status": "ok",
+      "detail": "0.1.0 at PATH, pin 0.1",
+      "fix": ""
+    },
+    {
+      "name": "hooks-binary",
+      "status": "ok",
+      "detail": "hooks resolve PATH",
+      "fix": ""
+    },
+    {
+      "name": "worker-binary",
+      "status": "ok",
+      "detail": "unit runs PATH",
+      "fix": ""
+    },
+    {
+      "name": "herdr-version",
+      "status": "ok",
+      "detail": "0.8.2",
+      "fix": ""
+    },
+    {
+      "name": "client-version",
+      "status": "ok",
+      "detail": "claude 2.1.294",
+      "fix": ""
+    },
+    {
+      "name": "tier-models",
+      "status": "ok",
+      "detail": "7 tiers resolve for claude",
+      "fix": ""
+    },
+    {
+      "name": "skill-shadowing",
+      "status": "ok",
+      "detail": "no global skill shadows a project skill",
+      "fix": ""
+    },
+    {
+      "name": "profile-tools",
+      "status": "ok",
+      "detail": "0 required tools present",
+      "fix": ""
+    },
+    {
+      "name": "worker",
+      "status": "ok",
+      "detail": "running 0.1.0, heartbeat 5s ago",
+      "fix": ""
+    },
+    {
+      "name": "worker-clients",
+      "status": "ok",
+      "detail": "the worker delivers to claude",
+      "fix": ""
+    },
+    {
+      "name": "systemd",
+      "status": "ok",
+      "detail": "user session running",
+      "fix": ""
+    },
+    {
+      "name": "sync-drift",
+      "status": "ok",
+      "detail": "generated files are current",
+      "fix": ""
+    },
+    {
+      "name": "dead-routes",
+      "status": "ok",
+      "detail": "every open item has a live recipient",
+      "fix": ""
+    },
+    {
+      "name": "gone-panes",
+      "status": "ok",
+      "detail": "every open session has its pane",
+      "fix": ""
+    },
+    {
+      "name": "stray-worktrees",
+      "status": "ok",
+      "detail": "no .worktrees directory",
+      "fix": ""
+    },
+    {
+      "name": "probes",
+      "status": "ok",
+      "detail": "feature off",
+      "fix": ""
+    },
+    {
+      "name": "operator-notify",
+      "status": "warn",
+      "detail": "none configured: the operator is not told when a session needs them",
+      "fix": "set [notify] operator = NAME to a channel of [notify.channels] in .ness/ness.toml, with notify in features"
+    },
+    {
+      "name": "secrets",
+      "status": "ok",
+      "detail": "no references in .ness/ness.toml",
+      "fix": ""
+    },
+    {
+      "name": "jev",
+      "status": "ok",
+      "detail": "policy declared",
+      "fix": ""
+    }
+  ]
+}

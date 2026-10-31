@@ -1,0 +1,25 @@
+# Weekly mutation testing on sync and store, report-only (R-QA-023): it never fails the gate.
+name: mutation
+on:
+  schedule:
+    - cron: "23 4 * * 1"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  gremlins:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      matrix:
+        pkg: [internal/sync, internal/store]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+      - run: go run github.com/go-gremlins/gremlins/cmd/gremlins@v0.5.0 unleash --output=gremlins-$(basename ${{ matrix.pkg }}).json ./${{ matrix.pkg }}
+        continue-on-error: true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: gremlins-${{ strategy.job-index }}
+          path: gremlins-*.json
+          if-no-files-found: warn

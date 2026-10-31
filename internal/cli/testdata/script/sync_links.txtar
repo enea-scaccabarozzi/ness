@@ -1,0 +1,27 @@
+# A user's CLAUDE.md gets an import block; a real .claude/skills directory is a conflict left
+# untouched; project skills beside ness-* are never touched.
+# covers: R-SYNC-063, R-SYNC-064, R-SYNC-080
+cd repo
+exits 3 ness sync
+stdout '^conflict \.claude/skills'
+cmp .claude/skills/mine.txt ../mine.txt
+! exists .claude/skills.ness-new
+grep '\A# My claude notes\n' CLAUDE.md
+grep '<!-- ness:begin core/import -->\n@AGENTS.md\n' CLAUDE.md
+cmp .agents/skills/deploy/SKILL.md ../deploy.md
+
+-- repo/.ness/ness.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"
+-- repo/CLAUDE.md --
+# My claude notes
+-- repo/.claude/skills/mine.txt --
+mine
+-- repo/.agents/skills/deploy/SKILL.md --
+deploy
+-- mine.txt --
+mine
+-- deploy.md --
+deploy

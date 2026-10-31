@@ -1,0 +1,12 @@
+# go-strict: git hooks with failure-only output. Install once per clone: lefthook install
+skip_output: [meta, summary, success]
+pre-commit:
+  commands:
+    lint:
+      glob: "*.go"
+      run: golangci-lint run --allow-serial-runners ./... && golangci-lint run --allow-serial-runners -c .golangci.tests.yml ./...
+pre-push:
+  commands:
+    # The light half of the gate; the tests run in the gate integrate uses, and in CI.
+    check:
+      run: make build lint audit selfcheck

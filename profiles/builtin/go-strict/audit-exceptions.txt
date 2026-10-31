@@ -1,0 +1,2 @@
+# go-strict audit exceptions: RULE PATH REASON, one per line. A line without a reason is
+# refused. Rules: T400 SLEEP FORTEST CLOCK PKGDOC LIBS FEATURE.

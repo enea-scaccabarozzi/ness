@@ -1,0 +1,15 @@
+# All five built-ins render together without conflict, --check is clean, no skill shadows a
+# global one, and the command list is unchanged.
+# covers: R-BLT-005, R-BLT-002, R-BLT-039
+[!exec:golangci-lint] skip 'go-strict needs golangci-lint on PATH'
+[!exec:python3] skip 'go-strict needs python3 on PATH'
+cd repo
+exec ness init --gate true --base main --profile program --profile go-strict --profile behavior-specs --profile git-conventional --profile example-release --yes
+! stdout conflict
+exec ness sync --check
+exec sh -c 'ls -d .agents/skills/ness-* | wc -l'
+stdout '^15$'
+exits 1 ness doctor
+stdout '^ok\tskill-shadowing\t'
+exec sh -c 'ness --help | sed -n "/^Available Commands:/,/^$/p" | grep -E "^  [a-z]+ " | awk "{print \$1}" | sort | tr "\n" " "'
+stdout '^close contract doctor hook inbox init integrate open pick post probe reply secret send size stats status sync worker $'

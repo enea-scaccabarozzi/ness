@@ -1,0 +1,70 @@
+# One file can run once per release: start --label a and --label b are two probes, status shows both
+# (text and JSON), a stop without a label refuses and lists the labels, stop --label a leaves b
+# active; the floor sees its own NESS_PROBE_LABEL; an unlabelled start is unchanged; a bad label is
+# refused before anything is registered.
+# covers: R-PRB-083, R-PRB-084, R-PRB-085, R-PRB-086, R-PRB-087, R-PRB-088
+cd repo
+exec ness init --gate true --base main --yes
+exec sh -c 'printf "features = [\"probes\"]\n" >> .ness/ness.toml'
+exec git add -A
+exec git commit -q -m 'ness init'
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+exec sh -c 'cd .worktrees/r-* && mkdir -p probes && cp ../../../a.md probes/'
+env NESS_SESSION=$R
+env NESS_TEST_NOW=2026-10-09T10:00:00Z
+# A bad label refuses before anything is registered.
+exits 2 sh -c 'cd .worktrees/r-* && ness probe start probes/a.md --label "bad label"'
+stderr 'a label matches'
+store probes 0
+# Two labels, two probes; a restart of one label keeps the other.
+exec sh -c 'cd .worktrees/r-* && ness probe start probes/a.md --label a'
+stdout '^started probes/a\.md \[a\] owner s-[0-9a-f]{12} next 2026-10-09T10:00:00Z$'
+exec sh -c 'cd .worktrees/r-* && ness probe start probes/a.md --label b'
+stdout '^started probes/a\.md \[b\] owner'
+exec sh -c 'cd .worktrees/r-* && ness probe start probes/a.md --label a'
+store probes 2
+exec ness status
+stdout '^probe\tprobes/a\.md \[a\]\ts-[0-9a-f]{12}\tactive\t-\t$'
+stdout '^probe\tprobes/a\.md \[b\]\t'
+exec ness status --json
+stdout '"label": "a"'
+stdout '"label": "b"'
+# The floor sees its own label.
+exec ness worker run --once
+exec ness status
+stdout '^probe\tprobes/a\.md \[a\]\t\S+\tactive\tGREEN\tlabel=a$'
+stdout '^probe\tprobes/a\.md \[b\]\t\S+\tactive\tGREEN\tlabel=b$'
+# A stop without a label is ambiguous: it refuses and lists the labels.
+exits 4 sh -c 'cd .worktrees/r-* && ness probe stop probes/a.md --note done'
+stderr 'live labels: a, b; pass --label'
+store probes 2
+# A stop with a label that is not live lists them too.
+exits 4 sh -c 'cd .worktrees/r-* && ness probe stop probes/a.md --label c --note done'
+stderr 'probes/a\.md \[c\]; live labels: a, b'
+exec sh -c 'cd .worktrees/r-* && ness probe stop probes/a.md --label a --note replaced'
+stdout '^stopped probes/a\.md \[a\] \(replaced\)$'
+store probes 1
+exec ness status
+stdout '^probe\tprobes/a\.md \[b\]\t'
+! stdout '\[a\]'
+# The only live label is what a bare stop means; an unlabelled start is a plain probe beside it.
+exec sh -c 'cd .worktrees/r-* && ness probe start probes/a.md'
+stdout '^started probes/a\.md owner'
+store probes 2
+exec ness status
+stdout '^probe\tprobes/a\.md\t'
+exec sh -c 'cd .worktrees/r-* && ness probe stop probes/a.md --note plain'
+stdout '^stopped probes/a\.md \(plain\)$'
+exec sh -c 'cd .worktrees/r-* && ness probe stop probes/a.md --note last'
+stdout '^stopped probes/a\.md \[b\] \(last\)$'
+store probes 0
+
+-- b.md --
+b
+-- a.md --
+---
+every: 30m
+floor: echo label=$NESS_PROBE_LABEL
+---
+scope a

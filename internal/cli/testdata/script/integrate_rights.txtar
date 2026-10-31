@@ -1,0 +1,49 @@
+# Arbitrary --from/--into (a promotion between long-lived branches) is for roots and the
+# operator; a child doing it is refused with exit 4; the source must be a local branch.
+# covers: R-SESS-101, R-SESS-090
+cd repo
+exec ness init --gate true --base main --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+exec git branch prod
+exec sh -c 'git checkout -q -b dev && echo d > d.txt && git add d.txt && git commit -q -m dev && git checkout -q main'
+exec git tag v1 dev
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+exec sh -c 'cd .worktrees/r-* && NESS_SESSION=$R ness open --scope c --tier standard --brief ../../../b.md'
+store last-session C
+exec sh -c 'cd .worktrees/c-* && NESS_SESSION=$C ness integrate --subject "feat: x" --from dev --into prod; echo "exit $?"'
+stdout 'exit 4'
+exec git rev-parse prod
+cp stdout ../prod-before
+exec git rev-parse main
+cmp stdout ../prod-before
+# The source must be a local branch: a tag, a sha, a missing name and HEAD are refused before the gate.
+exits 4 ness integrate --subject 'feat: x' --from v1 --into prod
+exits 4 ness integrate --subject 'feat: x' --from nosuch --into prod
+exits 4 ness integrate --subject 'feat: x' --from HEAD --into prod
+exec git rev-parse dev
+exits 4 ness integrate --subject 'feat: x' --from refs/heads/dev --into prod
+exec git rev-parse prod
+cmp stdout ../prod-before
+# --into must be a local branch too.
+exits 4 ness integrate --subject 'feat: x' --from dev --into nosuch
+exits 4 ness integrate --subject 'feat: x' --from dev --into v1
+# A root integrating its own branch into another branch than its base is not "integrated" for close.
+exec sh -c 'cd .worktrees/r-* && echo w > w.txt && git add -A && git commit -q -m w'
+exec sh -c 'cd .worktrees/r-* && NESS_SESSION=$R ness integrate --subject "feat: x" --into prod'
+stdout '^integrated session/r-[0-9a-f]{12} into prod at '
+store session $R integrated=
+# A root promotes dev into prod; the operator promotes it into main (checked out in the primary).
+exec sh -c 'cd .worktrees/r-* && NESS_SESSION=$R ness integrate --subject "feat: x" --from dev --into prod'
+stdout '^integrated dev into prod at [0-9a-f]{40}$'
+exec git rev-parse prod
+! cmp stdout ../prod-before
+exec ness integrate --subject 'feat: x' --from dev --into main
+stdout '^integrated dev into main at '
+exists d.txt
+# The operator must name both.
+exits 2 ness integrate --subject 'feat: x' --from dev
+
+-- b.md --
+b

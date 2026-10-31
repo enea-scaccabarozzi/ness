@@ -1,0 +1,53 @@
+# The program profile adds the program size: open accepts it, the valid list names it, and the
+# program checks (size = ["program"]) run for a program root's children only, not for a full
+# root's in the same project.
+# covers: R-SESS-155, R-SESS-163, R-CHK-015, R-PROF-085
+cd repo
+exec ness init --gate true --base main --profile program --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+exec ness open --root --scope f --tier standard --size full --brief ../b.md
+store last-session F
+exec ness open --root --scope p --tier standard --size program --brief ../b.md
+store last-session P
+store session $P size=program
+exits 4 ness open --root --scope x --tier standard --size huge --brief ../b.md
+stderr 'size "huge" is not one of: quick, full, program'
+env NESS_SESSION=$P
+exec ness size
+stdout '^size program \(quick, full, program\)$'
+# Only the operator moves a root off a profile's size; growing into it stays free for the root.
+exits 4 ness size full
+stderr 'only the operator moves a root off size program'
+env NESS_SESSION=
+exec ness open --root --scope k --tier standard --size quick --brief ../b.md
+store last-session K
+env NESS_SESSION=$K
+exec ness size program
+exits 4 ness size quick
+stderr 'only the operator moves a root off size program'
+env NESS_SESSION=
+# Without --size a project that adds sizes defaults to the last one, and a root that predates
+# sizes is filled the same way by the next command.
+exec ness open --root --scope g --tier standard --brief ../b.md
+store last-session G
+store session $G size=program
+store add-launch s-aaaaaaaaaaaa old - tier=standard
+store session s-aaaaaaaaaaaa size=
+exec ness status
+store session s-aaaaaaaaaaaa size=program
+# The seed roadmap records no autonomy: the program root's child is refused, the full root's opens.
+exec sh -c 'cd .worktrees/p-* && NESS_SESSION=$P ness open --scope c --tier standard --brief "$WORK/b.md" 2>&1; echo "exit $?"'
+stdout 'exit 4'
+stdout 'program/autonomy-recorded'
+exec sh -c 'cd .worktrees/f-* && NESS_SESSION=$F ness open --scope c --tier standard --brief "$WORK/b.md"'
+stdout '^opened s-[0-9a-f]{12} scope c '
+# Resized to program, the same root meets the checks from its next child.
+exec ness size program --session $F
+stdout '^size program: load ness-program; its open checks apply from your next child$'
+exec sh -c 'cd .worktrees/f-* && NESS_SESSION=$F ness open --scope d --tier standard --brief "$WORK/b.md" 2>&1; echo "exit $?"'
+stdout 'exit 4'
+stdout 'program/autonomy-recorded'
+
+-- b.md --
+b

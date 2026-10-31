@@ -1,0 +1,65 @@
+name    = "program"
+summary = "A root that maps a program into verticals, runs waves of children and releases (design §10)"
+sizes   = ["program"]
+
+[slots]
+"ness-entry#sizes"                    = { append = "size.md" }
+"ness-entry#post-compact"             = { append = "post-compact.md" }
+"ness-program#autonomy"               = { set = "autonomy.md" }
+"ness-program#operator-review-format" = { set = "review-format.md" }
+
+[files]
+".agents/skills/ness-program/SKILL.md" = { own = "skills/ness-program/SKILL.md" }
+"docs/program/roadmap.md"              = { seed = "roadmap.md" }
+"docs/program/decisions.md"            = { seed = "decisions.md" }
+"docs/program/briefs/TEMPLATE.md"      = { seed = "brief-template.md" }
+"docs/doctrine.md"                     = { seed = "doctrine.md" }
+
+[[checks]]
+id      = "autonomy-recorded"
+on      = "open"
+for     = "child"
+skill   = "ness-program"
+section = "Autonomy"
+message = "docs/program/roadmap.md has no recorded autonomy mode. Ask the operator the autonomy question (gate / bands / to checkpoint X / custom), then record the mode, their words and the date under \"## Autonomy\"."
+size    = ["program"]
+kind    = "section-matches"
+file    = "docs/program/roadmap.md"
+heading = "Autonomy"
+require = ['(?i)\b(gate|bands|to checkpoint|custom)\b', '\d{4}-\d{2}-\d{2}']
+
+[[checks]]
+id      = "checkpoint-before-wave"
+on      = "open"
+for     = "child"
+skill   = "ness-program"
+section = "Checkpoints"
+message = "a child landed since your last checkpoint. Send one (ness send --to operator --intent checkpoint --body @FILE --page URL) before the next wave."
+size    = ["program"]
+kind    = "checkpoint-since-landing"
+
+[[checks]]
+id      = "recovery-line"
+on      = "open"
+for     = "child"
+skill   = "ness-program"
+section = "Rules"
+message = "the roadmap recovery line does not match the last decision id of docs/program/decisions.md: update it so a compacted root finds its place."
+size    = ["program"]
+kind    = "match-last"
+file    = "docs/program/roadmap.md"
+pattern = 'last decision id (D\d+)'
+against_file    = "docs/program/decisions.md"
+against_pattern = '(?m)^- \*\*(D\d+)\*\*'
+
+[[checks]]
+id      = "no-child-decision-ids"
+on      = "integrate"
+for     = "child"
+skill   = "ness-program"
+section = "Rules"
+message = "the branch adds a decision ledger to its record. Children record choices in their report or as plain dated notes without ids; only the root's docs/program/decisions.md has ids."
+size    = ["program"]
+kind    = "branch-forbids"
+path    = '{record}/decisions\.md$'
+pattern = '(?m)^\s*[-*]\s*\*\*D\d+|\b[A-Za-z0-9]+-D\d+\b'

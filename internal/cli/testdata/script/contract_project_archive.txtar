@@ -1,0 +1,22 @@
+# A record directory moved on the branch (archived) carries its old project-wide amend line to a
+# path that is new on the branch. The line was already at the merge-base, so it opens nothing: an
+# edit of the frozen path still fails check.
+# covers: R-CTR-056
+cd repo
+exec ness init --gate true --base main --yes
+exec sh -c 'printf "features = [\"contracts\"]\n[contracts]\nfrozen = [\"steps.go\"]\n" >> .ness/ness.toml'
+exec sh -c 'printf "step\n" > steps.go && mkdir -p docs/sessions/a && cp ../old-decisions.md docs/sessions/a/decisions.md'
+exec git add -A
+exec git commit -q -m 'ness init'
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+env NESS_SESSION=$R
+exec sh -c 'cd .worktrees/r-* && mkdir -p docs/sessions/archive && git mv docs/sessions/a docs/sessions/archive/a && printf "more\n" >> steps.go && git commit -q -am "archive a; edit steps"'
+exec sh -c 'test -f .worktrees/r-*/docs/sessions/archive/a/decisions.md'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stdout '^differs\tsteps\.go\t'
+
+-- b.md --
+brief
+-- old-decisions.md --
+Amend steps.go (project-wide): old change [operator: "amend steps.go"] (2026-10-01)

@@ -1,0 +1,46 @@
+name: ci
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "17 3 * * *"
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+      - run: make validate
+      - run: make repeat
+  fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+      - run: make fuzz FUZZTIME=${{ github.event_name == 'schedule' && '10m' || '30s' }}
+  commits:
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - run: |
+          git cat-file -e "${{ github.event.before }}" 2>/dev/null || [ "${{ github.event_name }}" = pull_request ] || { echo "before unreachable: skipping"; exit 0; }
+          range="${{ github.event_name == 'pull_request' && format('origin/{0}..HEAD', github.base_ref) || format('{0}..{1}', github.event.before, github.sha) }}"
+          git log --format=%s "$range" | while IFS= read -r subject; do
+            printf '%s\n' "$subject" > "$RUNNER_TEMP/msg"
+            sh profiles/builtin/git-conventional/commit-msg "$RUNNER_TEMP/msg" || exit 1
+          done
+  release-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+      - run: goreleaser check
+      - run: goreleaser build --snapshot --clean --single-target
+      - run: file "$(find dist -type f -name ness)" | grep 'statically linked'

@@ -1,0 +1,9 @@
+# want: section
+name = "local"
+
+[[checks]]
+id = "c1"
+on = "open"
+skill = "ness-entry"
+message = "fix it"
+kind = "checkpoint-since-landing"

@@ -1,0 +1,50 @@
+# The owner of a lock (here a non-root session) amends only with an item addressed to it from its
+# manager or the operator that names the file: an unrelated item, an item about another file and
+# an item it sent itself are refused; an operator item and a manager's reply are accepted. The
+# operator amends any lock, a non-root session's included, on its own authority. It is an approval
+# trail, not a security boundary: NESS_SESSION is trusted as everywhere in ness.
+# covers: R-CTR-020, R-CTR-035
+cd repo
+exec ness init --gate true --base main --yes
+exec sh -c 'printf "features = [\"contracts\"]\n" >> .ness/ness.toml'
+exec sh -c 'printf "c\n" > c.txt; printf "d\n" > d.txt; printf "e\n" > e.txt'
+exec git add -A
+exec git commit -q -m 'ness init'
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+exec sh -c 'cd .worktrees/r-* && NESS_SESSION=$R ness open --scope c --tier standard --brief ../../../b.md'
+store last-session C
+env NESS_SESSION=$C
+exec sh -c 'cd .worktrees/c-* && ness contract freeze c.txt d.txt e.txt && git add -A && git commit -q -m freeze'
+# An item from the manager that does not name the file licenses nothing.
+env NESS_SESSION=$R
+exec sh -c 'cd .worktrees/r-* && ness send --to $C --body "how is it going?"'
+store last $C IHELLO
+exec sh -c 'cd .worktrees/r-* && ness send --to $C --body "amend other.txt is fine"'
+store last $C IOTHER
+env NESS_SESSION=$C
+exits 4 sh -c 'cd .worktrees/c-* && ness contract amend c.txt --reason x --item $IHELLO'
+stderr 'does not name c\.txt'
+exits 4 sh -c 'cd .worktrees/c-* && ness contract amend c.txt --reason x --item $IOTHER'
+stderr 'does not name c\.txt'
+# An item the caller sent itself is refused.
+exec sh -c 'cd .worktrees/c-* && ness send --to manager --body "I amend c.txt"'
+store last $R IMINE
+exits 4 sh -c 'cd .worktrees/c-* && ness contract amend c.txt --reason x --item $IMINE'
+stderr 'not addressed to you'
+# A manager's reply to the owner's request is an approval when it names the file.
+exec sh -c 'cd .worktrees/r-* && NESS_SESSION=$R ness reply $IMINE --body "yes, amend c.txt"'
+store last $C IREPLY
+exec sh -c 'cd .worktrees/c-* && ness contract amend c.txt --reason "approved by reply" --item $IREPLY'
+exec sh -c 'cd .worktrees/c-* && grep -c "^amend c.txt$" docs/sessions/r/c/contract.lock'
+stdout '^1$'
+# The operator amends a non-root lock without an item.
+exec sh -c 'cd .worktrees/c-* && git add -A && git commit -q -m amends'
+exec sh -c 'git merge -q $(cd .worktrees/c-* && git rev-parse HEAD)'
+env NESS_SESSION=
+exec ness contract amend e.txt --reason 'operator opens it'
+exec grep -c '^amend e.txt$' docs/sessions/r/c/contract.lock
+stdout '^1$'
+
+-- b.md --
+b

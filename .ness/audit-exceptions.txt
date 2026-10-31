@@ -1,0 +1,5 @@
+# go-strict audit exceptions: RULE PATH REASON, one per line. A line without a reason is
+# refused. Rules: T400 SLEEP FORTEST CLOCK PKGDOC LIBS FEATURE.
+T400 internal/worker/worker_test.go P4 suite; split when touched
+T400 internal/session/launch_test.go P3 suite; split when touched
+T400 internal/cli/e2e_test.go real-client suite behind the e2e tag; split when touched

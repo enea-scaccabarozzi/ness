@@ -1,0 +1,152 @@
+# ness pick --explain under policy jev shows Jev's answers (JSON "answers" with the Answers fields
+# in snake_case and "fallback"; plain output one "NAME VALUE" line per answer after the pick line);
+# Jev's kind wins over the declared one; a 401, an unset key or an unreachable endpoint fall back to
+# the declared rung with the cause in the reason and "fallback": true, "answers" absent; a
+# low-confidence answer falls back too but keeps "answers" with "fallback": true; the key
+# never reaches stdout, stderr or the request body. Under policy declared --explain adds neither
+# "answers" nor "fallback". The fake network answers api.typesafe.ai from $NESS_TEST_FAKES/jev.
+# covers: R-MOD-064
+cd repo
+exec ness init --gate true --base main --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+cp ../jev.toml .ness/ness.toml
+exec git commit -q -am 'policy jev'
+env TYPESAFE_API_KEY=ts-fake-k3y-7f3a
+mkdir $NESS_TEST_FAKES/jev/v1
+cp ../systemone.ok $NESS_TEST_FAKES/jev/v1/systemone
+
+# Rejects: --explain that drops the answers, renames a field, reports a fallback that did not
+# happen, or lets the declared kind (implement = standard) beat Jev's kind (debug, +1 novel = deep).
+stdin ../task.txt
+exec ness pick --stdin --json --explain --kind implement --role subagent
+onejson
+stdout '"rung": *"deep"'
+stdout '"reason": *"jev: kind debug \(c=0\.90\) \+1 novel/irreversible without a check"'
+stdout '"fallback": *false'
+stdout '"answers": *\{'
+stdout '"kind": *"debug"'
+stdout '"kind_confidence": *0\.9'
+stdout '"depth": *1'
+stdout '"ambiguity": *0\.5'
+stdout '"blast": *0[,\n]'
+stdout '"novelty": *1'
+stdout '"breadth": *0\.5'
+stdout '"check": *0\.1'
+stdout '"mechanical": *0\.2'
+stdout '"design": *0\.3'
+stdout '"judge": *0\.4'
+stdout '"chain": *0\.25'
+! stdout ts-fake-k3y
+! stderr ts-fake-k3y
+# Rejects: a request that drops the task from stdin or the declared kind, or carries the key.
+fake http body 1 ../req1.json
+grep 'Fix the flaky retry in the worker loop' ../req1.json
+grep '"declared_kind": *"implement"' ../req1.json
+grep '"model": *"jev-1\.14\.0"' ../req1.json
+! grep ts-fake-k3y ../req1.json
+
+# Rejects: plain --explain without one line per answer, or without the pick line.
+stdin ../task.txt
+exec ness pick --stdin --explain --kind implement
+stdout '^deep +opus/high +jev: kind debug'
+stdout '^kind\s+debug'
+stdout '^novelty\s+1'
+stdout '^check\s+0\.1'
+stdout '^chain\s+0\.25'
+stdout -count=11 '^(kind|depth|ambiguity|blast|novelty|breadth|check|mechanical|design|judge|chain)\s'
+! stdout ts-fake-k3y
+
+# Rejects: a 401 that panics, fails the pick, quotes the body (it echoes the key) or hides the cause.
+cp ../systemone.401 $NESS_TEST_FAKES/jev/v1/systemone
+stdin ../task.txt
+exec ness pick --stdin --json --explain --kind implement
+onejson
+stdout '"fallback": *true'
+stdout '"reason": *"jev: 401; kind implement"'
+stdout '"rung": *"standard"'
+! stdout '"answers"'
+! stdout 'authentication_error'
+! stdout ts-fake-k3y
+! stderr ts-fake-k3y
+
+# Rejects: a low-confidence fallback that drops the answers (calibration needs them) or hides
+# that it fell back.
+cp ../systemone.low $NESS_TEST_FAKES/jev/v1/systemone
+stdin ../task.txt
+exec ness pick --stdin --json --explain --kind implement
+onejson
+stdout '"fallback": *true'
+stdout '"reason": *"jev: confidence 0\.50 \\u003c 0\.80; kind implement"'
+stdout '"rung": *"standard"'
+stdout '"kind": *"debug"'
+stdout '"kind_confidence": *0\.5'
+
+# Rejects: an unset key that sends a request or does not say "no key".
+env TYPESAFE_API_KEY=
+exec rm -f $NESS_TEST_FAKES/http.json
+stdin ../task.txt
+exec ness pick --stdin --json --explain --kind implement
+stdout '"fallback": *true'
+stdout '"reason": *"jev: no key \(models\.jev\.key\); kind implement"'
+! stdout '"answers"'
+fake http requests 0
+env TYPESAFE_API_KEY=ts-fake-k3y-7f3a
+
+# Rejects: an unreachable endpoint that fails the pick instead of falling back.
+cp ../jev-offline.toml .ness/ness.toml
+stdin ../task.txt
+exec ness pick --stdin --json --explain --kind implement
+stdout '"fallback": *true'
+stdout '"reason": *"jev: [^;]+; kind implement"'
+stdout '"rung": *"standard"'
+! stdout ts-fake-k3y
+! stderr ts-fake-k3y
+
+# Rejects: --explain under policy declared inventing answers or a fallback.
+cp ../declared.toml .ness/ness.toml
+stdin ../task.txt
+exec ness pick --stdin --json --explain --kind implement
+onejson
+stdout '"rung": *"standard"'
+! stdout '"answers"'
+! stdout '"fallback"'
+
+-- task.txt --
+Fix the flaky retry in the worker loop; no test covers it yet.
+-- jev.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"
+[models]
+policy = "jev"
+[models.jev]
+key = "env:TYPESAFE_API_KEY"
+endpoint = "https://api.typesafe.ai"
+-- jev-offline.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"
+[models]
+policy = "jev"
+[models.jev]
+key = "env:TYPESAFE_API_KEY"
+endpoint = "https://jev.invalid"
+-- declared.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"
+[models]
+policy = "declared"
+-- systemone.ok --
+200
+{"model":"jev-1.14.0","answers":{"kind":{"type":"choice","choice":"debug","confidence":0.9,"probabilities":{"debug":0.9,"implement":0.1}},"depth":{"type":"score","score":3,"confidence":0.8,"probabilities":{"0":0,"1":0,"2":0,"3":1}},"ambiguity":{"type":"score","score":1,"confidence":0.8,"probabilities":{"0":0,"1":1,"2":0}},"blast":{"type":"score","score":0,"confidence":0.8,"probabilities":{"0":1,"1":0,"2":0}},"novelty":{"type":"score","score":2,"confidence":0.8,"probabilities":{"0":0,"1":0,"2":1}},"breadth":{"type":"score","score":1,"confidence":0.8,"probabilities":{"0":0,"1":1,"2":0}},"check":{"type":"noul","noul":0.1},"mechanical":{"type":"noul","noul":0.2},"design":{"type":"noul","noul":0.3},"judge":{"type":"noul","noul":0.4},"chain":{"type":"noul","noul":0.25}},"usage":{"input_tokens":900,"output_tokens":0}}
+-- systemone.low --
+200
+{"model":"jev-1.14.0","answers":{"kind":{"type":"choice","choice":"debug","confidence":0.5,"probabilities":{"debug":0.5,"implement":0.5}},"depth":{"type":"score","score":3,"confidence":0.8,"probabilities":{"0":0,"1":0,"2":0,"3":1}},"ambiguity":{"type":"score","score":1,"confidence":0.8,"probabilities":{"0":0,"1":1,"2":0}},"blast":{"type":"score","score":0,"confidence":0.8,"probabilities":{"0":1,"1":0,"2":0}},"novelty":{"type":"score","score":2,"confidence":0.8,"probabilities":{"0":0,"1":0,"2":1}},"breadth":{"type":"score","score":1,"confidence":0.8,"probabilities":{"0":0,"1":1,"2":0}},"check":{"type":"noul","noul":0.1},"mechanical":{"type":"noul","noul":0.2},"design":{"type":"noul","noul":0.3},"judge":{"type":"noul","noul":0.4},"chain":{"type":"noul","noul":0.25}},"usage":{"input_tokens":900,"output_tokens":0}}
+-- systemone.401 --
+401
+{"detail":{"error_type":"authentication_error","message":"Cannot authenticate with key ts-fake-k3y-7f3a."}}

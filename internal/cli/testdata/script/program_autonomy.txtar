@@ -1,0 +1,18 @@
+# The seed ends with its own "## Recovery" heading, so the recovery line is not part of
+# "## Autonomy": a recovery line that carries a date (a wave event) while no mode is recorded
+# still fails autonomy-recorded.
+# covers: R-BLT-110, R-CHK-011
+cd repo
+exec ness init --gate true --base main --profile program --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+exec ness open --root --scope r --tier standard --size program --brief ../b.md
+store last-session R
+exec sh -c 'cd .worktrees/r-* && sed -i "s/last wave event none/last wave event W1 opened 2026-10-16/" docs/program/roadmap.md && git add -A && git commit -q -m dated'
+exec sh -c 'cd .worktrees/r-* && NESS_SESSION=$R ness open --scope c --tier standard --brief "$WORK/b.md" 2>&1; echo "exit $?"'
+stdout 'exit 4'
+stdout 'program/autonomy-recorded'
+store sessions 1
+
+-- b.md --
+b

@@ -1,0 +1,53 @@
+# One script per exit code of the table: 0 for every happy path, 1 for a check that found
+# problems, 2 for a usage error, 3 for a sync conflict, 4 for a refusal.
+# covers: R-CFG-034, R-CFG-035
+cd repo
+exec ness init --gate true --base main --yes
+exec git add -A
+exec git commit -q -m init
+# 0
+exec ness status
+exec ness sync
+exec ness sync --check
+exec ness stats
+exec ness --version
+# 1: a check found problems
+rm .agents/skills/ness-launch/SKILL.md
+exits 1 ness sync --check
+exec ness sync
+exits 1 ness doctor
+exec sh -c 'printf "features = [\"probes\", \"contracts\"]\n" >> .ness/ness.toml'
+exec ness sync
+cp ../red.md red.md
+exits 1 ness probe run red.md
+exec ness contract check
+# 2: usage
+exits 2 ness bogus
+exits 2 ness status --nope
+exits 2 ness send
+exits 2 ness stats --by colour
+exits 2 ness sync --json
+# 3: sync conflict
+exec sh -c 'printf "profiles = [\"local\"]\n" >> .ness/ness.toml'
+exec sh -c 'mkdir -p docs && printf "mine\n" > docs/x.md'
+exits 3 ness sync
+exits 3 ness sync --check
+# 4: refused
+exits 4 ness post --channel x --file ../red.md
+exits 4 ness open --scope x --tier standard --brief ../red.md
+exits 4 ness probe run missing.md
+exits 4 ness sync --keep README.md
+cd $WORK
+exits 4 ness status
+
+-- red.md --
+---
+every: 1m
+floor: exit 1
+---
+-- repo/.ness/profiles/local/profile.toml --
+name = "local"
+[files]
+"docs/x.md" = { own = "x.md" }
+-- repo/.ness/profiles/local/x.md --
+theirs

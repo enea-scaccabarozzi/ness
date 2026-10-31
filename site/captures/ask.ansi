@@ -1,0 +1,15 @@
+  [0m[38;2;153;153;153mRan [0m[1m[38;2;153;153;153m3[0m[38;2;153;153;153m shell commands [0m
+
+[0m[38;2;255;255;255m●[0m Both children are done, and I need your answers before integrating either one. 
+  
+  [0m[1m[38;2;177;185;249mlist --open[0m is ready (commit 2b6c5d1). I reviewed the diff and ran the tests, and they pass. [0m[38;2;177;185;249m--open[0m combines with [0m[38;2;177;185;249m--json [0min either order,
+  and items keep their original numbers.
+
+  1. [0m[1mWhat should [0m[1m[38;2;177;185;249mtodo undo <n>[0m[1m do on an item that's already open? [0m(Still open from my last message.) I recommend a no-op, which is how [0m[38;2;177;185;249mdone[0m
+     treats an item that's already done. The child built an error instead.
+  2. [0m[1mShould unknown [0m[1m[38;2;177;185;249mlist[0m[1m flags be an error? [0mThe [0m[38;2;177;185;249mlist --open [0mchild added this. Until now, something like [0m[38;2;177;185;249mlist --foo [0mwas silently ignored and
+     listed everything. I recommend keeping the error, since a typo like [0m[38;2;177;185;249m--opne [0mwould otherwise quietly show the whole list.
+  3. [0m[1mCan I integrate both into main?[0m The two branches only conflict on the usage line, which I'll merge to [0m[38;2;177;185;249mlist [--open] [--json] | done <n> [0m
+     [0m[38;2;177;185;249m| undo <n> | …[0m.
+
+[0m[38;2;153;153;153m✻[0m [0m[38;2;153;153;153mBrewed for 16s · done 2:10 PM[0m

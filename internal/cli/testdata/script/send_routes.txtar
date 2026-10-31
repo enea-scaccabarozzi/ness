@@ -1,0 +1,91 @@
+# Routing: a session talks to its manager and its children; siblings go through the manager;
+# any session addresses the operator, a child's item copied to its manager as an fyi (CX-17);
+# the operator addresses roots and has no manager; closed or unknown recipients and unknown or
+# closed callers are refused; a refusal creates nothing; outside a ness project send refuses.
+# covers: R-MSG-013, R-MSG-017, R-MSG-018, R-MSG-051, R-CFG-053
+cd repo
+exec ness init --gate true --base main --yes
+store add-session s-aaaaaaaaaaaa root
+store add-session s-bbbbbbbbbbbb child-b s-aaaaaaaaaaaa
+store add-session s-cccccccccccc child-c s-aaaaaaaaaaaa
+store add-session s-dddddddddddd child-d s-bbbbbbbbbbbb
+# child -> manager lands in the root's inbox (by name or by id); child -> its own child works.
+env NESS_SESSION=s-bbbbbbbbbbbb
+exec ness send --to manager --body 'to my manager'
+stdout '^sent m-[a-z2-7]{8} to s-aaaaaaaaaaaa$'
+store items s-aaaaaaaaaaaa 1
+exec ness send --to s-aaaaaaaaaaaa --body 'to my manager by id'
+store items s-aaaaaaaaaaaa 2
+exec ness send --to s-dddddddddddd --body 'to my child'
+store items s-dddddddddddd 1
+# root -> manager is an operator item; so is root -> operator; root -> child works.
+env NESS_SESSION=s-aaaaaaaaaaaa
+exec ness send --to manager --body 'root to operator'
+stdout '^sent m-[a-z2-7]{8} to operator$'
+store items operator 1
+exec ness send --to operator --body 'root to operator again'
+store items operator 2
+store items s-aaaaaaaaaaaa 2
+exec ness send --to s-bbbbbbbbbbbb --body 'root to child'
+store items s-bbbbbbbbbbbb 1
+# Siblings and a grandparent are refused with nothing created.
+env NESS_SESSION=s-bbbbbbbbbbbb
+exits 4 ness send --to s-cccccccccccc --body 'sibling'
+stderr 'siblings talk through the manager'
+store items s-cccccccccccc 0
+env NESS_SESSION=s-dddddddddddd
+exits 4 ness send --to s-aaaaaaaaaaaa --body 'grandchild to root'
+store items s-aaaaaaaaaaaa 2
+# A child addresses the operator; its manager gets one fyi copy; the repeat creates nothing.
+env NESS_SESSION=s-bbbbbbbbbbbb
+exec ness send --to operator --body 'child to operator' --intent decision
+stdout '^sent m-[a-z2-7]{8} to operator$'
+store items operator 3
+store last operator ASK
+store items s-aaaaaaaaaaaa 3
+store last s-aaaaaaaaaaaa COPY
+store item $COPY intent=fyi sender=s-bbbbbbbbbbbb recipient=s-aaaaaaaaaaaa
+exec ness send --to operator --body 'child to operator' --intent decision
+stdout '^already sent m-[a-z2-7]{8}$'
+store items s-aaaaaaaaaaaa 3
+env NESS_SESSION=s-aaaaaaaaaaaa
+exec ness inbox --show $COPY
+stdout '^\[copy of '$ASK' to operator\]$'
+stdout '^child to operator$'
+# Shown, the fyi copy leaves the list (R-MSG-041).
+store items s-aaaaaaaaaaaa 2
+# The operator (no NESS_SESSION) talks to roots only and has no manager.
+env NESS_SESSION=
+exec ness send --to s-aaaaaaaaaaaa --body 'operator to root'
+stdout '^sent m-[a-z2-7]{8} to s-aaaaaaaaaaaa$'
+store items s-aaaaaaaaaaaa 3
+exits 4 ness send --to s-bbbbbbbbbbbb --body 'operator to child'
+stderr 'not a root'
+exits 4 ness send --to manager --body 'operator to manager'
+stderr 'no manager'
+exits 4 ness send --to operator --body 'operator to operator'
+store items s-bbbbbbbbbbbb 1
+# Closed and unknown recipients, and an unknown or closed caller (Review Focus 4).
+store close-session s-cccccccccccc
+env NESS_SESSION=s-aaaaaaaaaaaa
+exits 4 ness send --to s-cccccccccccc --body 'to a closed child'
+stderr 'closed'
+exits 4 ness send --to s-eeeeeeeeeeee --body 'to nobody'
+stderr 'not a session of this project'
+env NESS_SESSION=s-eeeeeeeeeeee
+exits 4 ness send --to manager --body 'from nobody'
+stderr 'NESS_SESSION=s-eeeeeeeeeeee is not a session of this project'
+env NESS_SESSION=s-cccccccccccc
+exits 4 ness send --to manager --body 'from a closed session'
+stderr 'closed'
+store items s-aaaaaaaaaaaa 3
+# --to manager is checked like any recipient: a child whose manager is closed is refused (L8).
+store close-session s-aaaaaaaaaaaa
+env NESS_SESSION=s-bbbbbbbbbbbb
+exits 4 ness send --to manager --body x
+stderr 'session s-aaaaaaaaaaaa is closed'
+store items s-aaaaaaaaaaaa 3
+# Outside a ness project, send refuses (R-CFG-053).
+cd $WORK
+env NESS_SESSION=
+exits 4 ness send --to s-aaaaaaaaaaaa --body x

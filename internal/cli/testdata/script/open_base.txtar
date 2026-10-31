@@ -1,0 +1,17 @@
+# A base that does not resolve is refused before the row is written: no session, worktree or
+# branch, and the same scope opens at once with a good base (R-CFG-036, R-SESS-010).
+# covers: R-CFG-036, R-SESS-010, R-SESS-020
+cd repo
+exec ness init --gate true --base main --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+exits 4 ness open --root --scope y --tier standard --base nope --brief ../b.md
+stderr 'does not resolve'
+store sessions 0
+fake herdr tabs 0
+exec git branch --list 'session/*'
+! stdout .
+exec ness open --root --scope y --tier standard --base main --brief ../b.md
+store sessions 1
+-- b.md --
+b

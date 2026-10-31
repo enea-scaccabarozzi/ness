@@ -1,0 +1,35 @@
+# freeze and amend are allowed only to the lock's owner and its manager: a sibling's amend is
+# refused (exit 4), the manager's is accepted; a root's lock is amended by the operator.
+# covers: R-CTR-020
+cd repo
+exec ness init --gate true --base main --yes
+exec sh -c 'printf "features = [\"contracts\"]\n" >> .ness/ness.toml'
+exec sh -c 'printf "Feature: a\n" > a.txt; printf "Feature: b\n" > b.txt'
+exec git add -A
+exec git commit -q -m 'ness init'
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+exec sh -c 'cd .worktrees/r-* && NESS_SESSION=$R ness open --scope c --tier standard --brief ../../../b.md'
+store last-session C
+exec sh -c 'cd .worktrees/r-* && NESS_SESSION=$R ness open --scope d --tier standard --brief ../../../b.md'
+store last-session D
+env NESS_SESSION=$C
+exec sh -c 'cd .worktrees/c-* && ness contract freeze a.txt && git add -A && git commit -q -m freeze'
+# The lock reaches the siblings' branches as a merge would carry it.
+exec sh -c 'cd .worktrees/d-* && git merge -q $(cd ../c-* && git rev-parse HEAD)'
+exec sh -c 'cd .worktrees/r-* && git merge -q $(cd ../c-* && git rev-parse HEAD)'
+env NESS_SESSION=$D
+exits 4 sh -c 'cd .worktrees/d-* && ness contract amend a.txt --reason x'
+stderr 'owned by'
+env NESS_SESSION=$R
+exec sh -c 'cd .worktrees/r-* && ness contract amend a.txt --reason "manager opens it"'
+exec sh -c 'cd .worktrees/r-* && grep "^amend a.txt$" docs/sessions/r/c/contract.lock'
+# A root's lock: the operator is its manager.
+exec sh -c 'cd .worktrees/r-* && ness contract freeze b.txt && git add -A && git commit -q -m root-freeze'
+exec sh -c 'git merge -q $(cd .worktrees/r-* && git rev-parse HEAD)'
+env NESS_SESSION=
+exec ness contract amend b.txt --reason 'operator opens it'
+exec grep '^amend b.txt$' docs/sessions/r/contract.lock
+
+-- b.md --
+b

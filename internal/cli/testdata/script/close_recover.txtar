@@ -1,0 +1,24 @@
+# A store failure after the teardown leaves the branch, so a retry still finds the report.
+# covers: R-SESS-065, R-SESS-072, R-SESS-061
+cd repo
+exec ness init --gate true --base main --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+exec sh -c 'cd .worktrees/r-* && printf "## Lessons\nNone.\n" > docs/sessions/r/report.md && git add -A && git commit -q -m r && NESS_SESSION=$R ness integrate --subject "feat: x"'
+store fail-close x
+! exec ness close $R
+stderr 'injected close failure'
+store session $R closed=false
+exec git branch --list 'session/r-*'
+stdout 'session/r-'
+store allow-close x
+exec ness close $R
+stdout 'closed'
+store session $R closed=true
+exec git branch --list 'session/r-*'
+! stdout 'session/r-'
+
+-- b.md --
+b

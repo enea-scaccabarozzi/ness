@@ -1,0 +1,63 @@
+# A session that never reached ready closes without report or integration, even with its tab
+# gone; a session that was ready is not exempt even when its tab is gone, nor one that was ready
+# in an earlier run and stalled in a relaunch.
+# covers: R-SESS-066
+cd repo
+exec ness init --gate true --base main --yes
+cp ../ness.toml .ness/ness.toml
+exec git add -A
+exec git commit -q -m 'ness init'
+fake herdr ready-on-start false
+exits 4 ness open --root --scope stuck --tier standard --brief ../b.md
+store last-session S
+fake herdr close-tab stuck
+exec ness close $S
+stdout '^closed s-[0-9a-f]{12} \(stuck\)$'
+store session $S closed=true
+exec git worktree list
+! stdout 'worktrees/stuck-'
+# A ready session whose tab is gone still needs its report.
+fake herdr ready-on-start true
+exec ness open --root --scope ran --tier standard --brief ../b.md
+store last-session Q
+fake herdr close-tab ran
+exits 4 ness close $Q
+stderr 'report\.md'
+# The exact failing --resume: ready mark cleared (NewRun) before the run is bumped. Still not exempt.
+store set-ready $Q false
+exits 4 ness close $Q
+stderr 'report\.md'
+# A session that was ready, then relaunched and stalled (ready mark cleared, run 2) is not exempt.
+store bind $Q pane tab agent
+exits 4 ness close $Q
+stderr 'report\.md'
+exec sh -c 'cd .worktrees/ran-* && printf "## Lessons\nNone.\n" > docs/sessions/ran/report.md && git add -A && git commit -q -m r'
+exec ness close $Q --discard
+store session $Q closed=true
+
+# A never-ran session with an integration recorded: its branch is deleted only if it has no
+# commits beyond its start point.
+fake herdr ready-on-start false
+exits 4 ness open --root --scope kept --tier standard --brief ../b.md
+store last-session K
+exec sh -c 'cd .worktrees/kept-* && echo x > x.txt && git add -A && git commit -q -m x'
+store integrate $K deadbeef
+exec ness close $K
+exec git branch --list 'session/kept-*'
+stdout 'session/kept-'
+exits 4 ness open --root --scope bare --tier standard --brief ../b.md
+store last-session B
+store integrate $B deadbeef
+exec ness close $B
+exec git branch --list 'session/bare-*'
+! stdout .
+
+-- ness.toml --
+ness = "0.1"
+project = "repo"
+base = "main"
+gate = "true"
+[launch]
+ready_timeout = "200ms"
+-- b.md --
+b

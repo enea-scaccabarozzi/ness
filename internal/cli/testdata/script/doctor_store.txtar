@@ -1,0 +1,96 @@
+# Doctor reports the worker (running, version, heartbeat age with 60 s as the line), a missing
+# systemd user session with the ness worker run alternative, sync drift without writing, dead
+# routes, sessions whose pane is gone and worktrees without a session.
+# covers: R-DOC-010, R-DOC-011, R-DOC-012, R-DOC-013, R-DOC-014, R-DOC-016, R-DOC-022, R-DOC-001
+cd repo
+exec ness init --gate true --base main --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+env NESS_TEST_NOW=2026-10-08T10:00:00Z
+exits 1 ness doctor
+stdout '^fail\tworker\tnot running \(no heartbeat\)\tfix: ness worker install'
+stdout '^ok\tsystemd\t'
+stdout '^ok\tsync-drift\t'
+stdout '^ok\tdead-routes\t'
+stdout '^ok\tgone-panes\t'
+stdout '^ok\tstray-worktrees\t'
+store heartbeat 59 0.1.0
+exec ness doctor
+stdout '^ok\tworker\trunning 0\.1\.0, heartbeat 59s ago'
+store heartbeat 61 0.1.0
+exits 1 ness doctor
+stdout '^fail\tworker\theartbeat 61s ago.*\tfix: systemctl --user restart ness-repo'
+store heartbeat 5 0.0.9
+exits 1 ness doctor
+stdout '^fail\tworker\trunning 0\.0\.9, this binary is 0\.1\.0.*\tfix: systemctl --user restart ness-repo'
+store heartbeat 5 0.1.0
+# No systemd user session.
+fake fail 'systemctl --user is-system-running' 'Failed to connect to bus: No such file or directory'
+exits 1 ness doctor
+stdout '^fail\tsystemd\tno systemd user session.*\tfix: ness worker run \(in a terminal, without systemd\)'
+# A degraded user session still runs units: a warning, exit 0.
+fake output 'systemctl --user is-system-running' 'degraded'
+exec ness doctor
+stdout '^warn\tsystemd\tuser session degraded.*\tfix: systemctl --user --failed'
+fake output 'systemctl --user is-system-running' 'running'
+# Sync drift. A kept user edit is a warning (sync --check passes on it); the tree is not written.
+exec sh -c 'echo extra >> .agents/skills/ness-entry/SKILL.md'
+snap drift
+exec ness doctor
+stdout '^warn\tsync-drift\tedited.*rm \.agents/skills/ness-entry/SKILL\.md && ness sync'
+! stdout 'git checkout'
+exec ness sync --check
+samesnap drift
+exec git checkout -q -- .agents/skills/ness-entry/SKILL.md
+# Real drift, what sync --check fails on: a generated file is gone.
+rm .agents/skills/ness-entry/SKILL.md
+exits 1 ness doctor
+stdout '^fail\tsync-drift\twould change .*ness-entry.*\tfix: ness sync'
+! exec ness sync --check
+exec git checkout -q -- .agents/skills/ness-entry/SKILL.md
+# A drift that only touches the lock (a newer ness) is a fail too, as sync --check says.
+env NESS_TEST_VERSION=0.1.1
+! exec ness sync --check
+exits 1 ness doctor
+stdout '^fail\tsync-drift\twould change the lock\tfix: ness sync'
+env NESS_TEST_VERSION=0.1.0
+# A dead route: an open item to a closed session, and one to an unknown session.
+store add-session s-aaaaaaaaaaaa root
+store add-session s-bbbbbbbbbbbb child s-aaaaaaaaaaaa
+env NESS_SESSION=s-aaaaaaaaaaaa
+exec ness send --to s-bbbbbbbbbbbb --body pending
+store last s-bbbbbbbbbbbb ITEM
+env NESS_SESSION=
+store close-session s-bbbbbbbbbbbb
+exits 1 ness doctor
+stdout '^fail\tdead-routes\t.*'$ITEM'.*s-bbbbbbbbbbbb.*closed.*\tfix: '
+# A session whose pane is gone.
+store bind s-aaaaaaaaaaaa wF:p9 wF:t9 p-root
+exits 1 ness doctor
+stdout '^fail\tgone-panes\t.*s-aaaaaaaaaaaa.*wF:p9.*\tfix: ness open --resume s-aaaaaaaaaaaa'
+# A worktree without a session.
+exec git worktree add -q .worktrees/stray-000000000000
+exits 1 ness doctor
+stdout '^fail\tstray-worktrees\t.*stray-000000000000.*\tfix: git worktree remove \.worktrees/stray-000000000000$'
+! stdout 'remove --force'
+exec git worktree list
+stdout 'stray-000000000000'
+# A herdr that cannot answer is a warning, never an ok.
+fake herdr fail 'agent get'
+exits 1 ness doctor
+stdout '^warn\tgone-panes\tcould not ask herdr: .*injected failure'
+! stdout '^ok\tgone-panes'
+# A store from an older ness is a warning, and doctor does not migrate it.
+store set-version 1
+exec ness doctor
+stdout '^warn\tworker\t.*any ness command migrates it'
+stdout '^warn\tdead-routes\t.*any ness command migrates it'
+# A store from a newer ness is a failing check, not a refusal, and doctor still runs the rest.
+exec git worktree remove --force .worktrees/stray-000000000000
+store set-version 99
+exits 1 ness doctor
+stdout '^fail\tworker\t.*newer.*'
+stdout '^fail\tdead-routes\t.*newer'
+stdout '^fail\tgone-panes\t.*newer'
+stdout '^ok\tsync-drift\t'
+stdout '^ok\tprobes\t'

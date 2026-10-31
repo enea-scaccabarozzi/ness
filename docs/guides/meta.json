@@ -1,0 +1,4 @@
+{
+  "title": "Build your harness",
+  "pages": ["local-profile", "checks", "program", "probes", "notify", "contracts", "integration", "models", "codex", "doctor", "upgrade"]
+}

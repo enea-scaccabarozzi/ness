@@ -1,0 +1,72 @@
+# program renders alone with zero conflicts and a clean --check, adds the size, seeds the
+# roadmap, the ledger and the brief template, exposes the autonomy and review-format slots,
+# names the autonomy modes, asks them per run, adds no command, and a 100 KB roadmap triggers nothing.
+# covers: R-BLT-001, R-BLT-030, R-BLT-032, R-BLT-033, R-BLT-034, R-BLT-035, R-BLT-038, R-BLT-039, R-BLT-041, R-PROF-002, R-PROF-081
+cd repo
+exec ness init --gate true --base main --profile program --yes
+! stdout conflict
+exec ness sync --check
+grep '"program": "0.1.0"' .ness/lock.json
+grep '^name: ness-program$' .agents/skills/ness-program/SKILL.md
+grep '^- \*\*program\*\*' .agents/skills/ness-entry/SKILL.md
+# Rendered: the program size line sits under Work sizes and names its size.
+exec sed -n '/^## Work sizes/,/^## Not in a session yet/p' .agents/skills/ness-entry/SKILL.md
+stdout '^- \*\*program\*\* \(size `program`\)'
+grep '^## Invariants' docs/program/roadmap.md
+grep '^## Verticals' docs/program/roadmap.md
+grep '| Spec owner |' docs/program/roadmap.md
+grep '^## Waves' docs/program/roadmap.md
+grep '^## Conduct' docs/program/roadmap.md
+grep '^## Releases' docs/program/roadmap.md
+grep '^## Autonomy$' docs/program/roadmap.md
+grep '^## Program doctrine' docs/program/roadmap.md
+exists docs/doctrine.md
+grep '^## Recovery$' docs/program/roadmap.md
+grep '^Recovery line:' docs/program/roadmap.md
+exec sh -c 'test $(grep -n "^## Autonomy$" docs/program/roadmap.md | cut -d: -f1) -lt $(grep -n "^## Recovery$" docs/program/roadmap.md | cut -d: -f1)'
+grep 'Append-only' docs/program/decisions.md
+grep 'D<n>' docs/program/decisions.md
+exists docs/program/briefs/TEMPLATE.md
+grep '^## Question' docs/program/briefs/TEMPLATE.md
+grep '^## Outcome' docs/program/briefs/TEMPLATE.md
+grep '^## Invariants' docs/program/briefs/TEMPLATE.md
+grep '^## Operator words' docs/program/briefs/TEMPLATE.md
+grep '^## Sources' docs/program/briefs/TEMPLATE.md
+grep '^## Rights and limits' docs/program/briefs/TEMPLATE.md
+grep '^## Tier' docs/program/briefs/TEMPLATE.md
+grep '^## Spec owner' docs/program/briefs/TEMPLATE.md
+grep '^## Integration target' docs/program/briefs/TEMPLATE.md
+grep '^## How to report' docs/program/briefs/TEMPLATE.md
+grep 'Checkpoint page: HTML' .agents/skills/ness-program/SKILL.md
+grep 'ness send --to operator --intent checkpoint' .agents/skills/ness-program/SKILL.md
+! grep 'A heartbeat line to the operator' .agents/skills/ness-program/SKILL.md
+grep 'Not asked yet' .agents/skills/ness-program/SKILL.md
+grep '^- \*\*bands\*\*' .agents/skills/ness-program/SKILL.md
+grep 'Asked per program run' .agents/skills/ness-program/SKILL.md
+# The command list is the same eighteen.
+exec sh -c 'ness --help | sed -n "/^Available Commands:/,/^$/p" | grep -E "^  [a-z]+ " | awk "{print \$1}" | sort | tr "\n" " "'
+stdout '^close contract doctor hook inbox init integrate open pick post probe reply secret send size stats status sync worker $'
+# A local set replaces both single slots.
+exec sh -c 'sed -i "s/^profiles = .*/profiles = [\"program\", \"local\"]/" .ness/ness.toml'
+exec ness sync
+grep 'Review format: Markdown file' .agents/skills/ness-program/SKILL.md
+! grep 'Checkpoint page: HTML' .agents/skills/ness-program/SKILL.md
+grep 'may merge without asking' .agents/skills/ness-program/SKILL.md
+grep 'Asked per program run' .agents/skills/ness-program/SKILL.md
+# A 100 KB roadmap is guidance only.
+exec sh -c 'head -c 102400 /dev/zero | tr "\0" x >> docs/program/roadmap.md'
+exec ness sync
+! stdout .
+exec ness sync --check
+exits 1 ness doctor
+! stdout roadmap
+
+-- repo/.ness/profiles/local/profile.toml --
+name = "local"
+[slots]
+"ness-program#operator-review-format" = { set = "format.md" }
+"ness-program#autonomy" = { set = "grant.md" }
+-- repo/.ness/profiles/local/format.md --
+Review format: Markdown file
+-- repo/.ness/profiles/local/grant.md --
+The root may merge without asking.

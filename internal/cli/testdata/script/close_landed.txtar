@@ -1,0 +1,56 @@
+# A plain close proves nothing is lost first: commits made after ness integrate and uncommitted
+# files refuse (exit 4) and leave tab, worktree and branch alone; a clean integrated session
+# closes and its branch goes; a root's tab stays through it all. The ness-written brief is no
+# obstacle.
+# covers: R-SESS-060, R-SESS-064, R-SESS-065, R-SESS-072, R-SESS-103, R-SESS-122
+cd repo
+exec ness init --gate true --base main --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+exec sh -c 'cd .worktrees/r-* && printf "## Lessons\nNone.\n" > docs/sessions/r/report.md && git add -A && git commit -q -m report && NESS_SESSION=$R ness integrate --subject "feat: x"'
+# A commit after the integrate.
+exec sh -c 'cd .worktrees/r-* && echo late > late.txt && git add -A && git commit -q -m late'
+exits 4 ness close $R
+stderr 'not integrated into main.*; nothing was touched'
+! stderr 'open --resume'
+exec git branch --list 'session/r-*'
+stdout 'session/r-'
+exec git worktree list
+stdout 'worktrees/r-'
+# A root's tab stays (R-SESS-122); nothing else was touched and the row is open.
+fake herdr tabs 1
+store session $R closed=false
+# Integrated again, but an uncommitted file.
+exec sh -c 'cd .worktrees/r-* && NESS_SESSION=$R ness integrate --subject "feat: x"'
+exec sh -c 'cd .worktrees/r-* && echo wip > wip.txt'
+exits 4 ness close $R
+stderr 'uncommitted changes: \?\? wip\.txt'
+exec git branch --list 'session/r-*'
+stdout 'session/r-'
+exec git worktree list
+stdout 'worktrees/r-'
+fake herdr tabs 1
+exec sh -c 'rm .worktrees/r-*/wip.txt'
+# Commits on a detached HEAD have no ref: refused, and the commit is still in the worktree.
+exec sh -c 'cd .worktrees/r-* && git checkout -q --detach && echo det > det.txt && git add -A && git commit -q -m detached'
+exits 4 ness close $R
+stderr 'not on branch session/r-'
+exec sh -c 'cd .worktrees/r-* && git log -1 --format=%s'
+stdout '^detached$'
+exec git worktree list
+stdout 'worktrees/r-'
+exec sh -c 'cd .worktrees/r-* && git checkout -q -'
+
+# Clean and integrated: closes, branch deleted.
+exec ness close $R
+store session $R closed=true
+exec git branch --list 'session/r-*'
+! stdout .
+exec git worktree list
+! stdout 'worktrees/r-'
+fake herdr tabs 1
+
+-- b.md --
+b

@@ -1,0 +1,163 @@
+# ness open picks the rung from the selector when --tier is left out: the declared kind moves it
+# from base, no kind gives base silently, an explicit rung above the recommendation needs --reason
+# (recorded and shown by stats), --tier up/down steps a resumed session and stops at the ends,
+# the ceiling caps both paths, and a command selector's offset reaches the launch.
+# covers: R-MOD-040, R-MOD-041, R-MOD-042, R-MOD-043, R-MOD-045, R-SESS-023, R-SESS-051
+cd repo
+exec ness init --gate true --base main --yes
+cp ../ness.toml .ness/ness.toml
+exec git add -A
+exec git commit -q -m 'ness init'
+
+# Rejects: a kind that is ignored (the launch stays on base): design is base+1 = deep.
+exec ness open --root --scope des --kind design --brief ../brief.md
+store last-session D
+store session $D tier=deep
+fake herdr args '--model opus --effort high '
+
+# Rejects: an unknown kind that silently becomes base; the opened line names rung and reason.
+exits 4 ness open --root --scope typo --kind desgin --brief ../brief.md
+stderr 'desgin'
+stderr 'design'
+! stdout 'opened'
+
+# Rejects: refusing a brief with no kind (R-MOD-042 replaced): base, silently, reason recorded.
+exec ness open --root --scope plain --brief ../brief.md
+stdout 'tier standard \(base: no kind\)$'
+store last-session P
+store session $P tier=standard router_reason='base: no kind'
+fake herdr args '--model opus --effort medium '
+
+# Rejects: an explicit --tier that skips the recommendation check: implement recommends standard.
+exits 4 ness open --root --scope over --tier frontier --kind implement --brief ../brief.md
+stderr '\-\-reason'
+stderr 'frontier'
+stderr 'standard'
+! stderr 'opened'
+
+# Rejects: a --reason that is accepted but not recorded (R-MOD-043), or lost before stats.
+exec ness open --root --scope over --tier frontier --kind implement --reason 'novel design' --brief ../brief.md
+store last-session O
+store session $O tier=frontier router_reason='explicit: novel design'
+store get $O client_session CS
+exec sh -c 'd=$(cd .worktrees/over-* && pwd -P); p=$HOME/.claude/projects/$(echo $d | sed "s/[^A-Za-z0-9]/-/g"); mkdir -p $p; cp ../t.jsonl $p/$CS.jsonl'
+exec ness stats --json
+stdout '"router_reason": "explicit: novel design"'
+
+# Rejects: an explicit rung at or below the recommendation that still demands --reason.
+exec ness open --root --scope low --tier economy --kind implement --brief ../brief.md
+store last-session L
+store session $L tier=economy router_reason=explicit
+
+# Rejects: up/down accepted on a new session (they only step a stored rung).
+! exec ness open --root --scope nope --tier up --brief ../brief.md
+stderr '\-\-resume'
+
+# Rejects: --tier up that re-asks the selector instead of stepping the stored rung: standard -> deep.
+fake herdr ready-on-start false
+exits 4 ness open --root --scope up --tier standard --brief ../brief.md
+store last-session U
+fake herdr exit p-up
+fake herdr ready-on-start true
+exec ness open --resume $U --tier up
+stdout 'tier deep \(up from standard\)'
+store session $U tier=deep router_reason='up from standard'
+fake herdr args '--model opus --effort high '
+
+# Rejects: --tier up on the top rung that panics, refuses or wraps: apex stays apex.
+fake herdr ready-on-start false
+exits 4 ness open --root --scope top --tier apex --reason 'hardest problem' --brief ../brief.md
+store last-session T
+fake herdr exit p-top
+fake herdr ready-on-start true
+exec ness open --resume $T --tier up
+stdout 'tier apex \(already at the top\)'
+store session $T tier=apex router_reason='already at the top'
+fake herdr args '--model fable --effort high '
+
+# Rejects: --tier down that goes below the bottom rung: bulk stays bulk.
+fake herdr ready-on-start false
+exits 4 ness open --root --scope bot --tier bulk --brief ../brief.md
+store last-session B
+fake herdr exit p-bot
+fake herdr ready-on-start true
+exec ness open --resume $B --tier down
+stdout 'tier bulk \(already at the bottom\)'
+store session $B tier=bulk router_reason='already at the bottom'
+fake herdr args '--model haiku --effort medium '
+
+# Rejects: a clamp that ignores the ceiling: with ceiling deep, design (project kind +2) lands on deep and an
+# explicit frontier is refused even with --reason.
+cp ../ceiling.toml .ness/ness.toml
+exec git commit -q -am 'ceiling deep'
+exec ness open --root --scope capped --kind design --brief ../brief.md
+store last-session C
+store session $C tier=deep
+exits 4 ness open --root --scope capped2 --tier frontier --reason 'want it' --brief ../brief.md
+stderr 'frontier'
+
+# Rejects: --tier up that passes the ceiling below the top: deep stays deep; and a stored rung
+# above the ceiling (apex, opened before) that up/down silently moves instead of refusing.
+fake herdr exit p-capped
+exec ness open --resume $C --tier up
+stdout 'tier deep \(already at the top\)'
+store session $C tier=deep
+fake herdr exit p-top
+exits 4 ness open --resume $T --tier down
+stderr 'apex'
+stderr 'bulk, economy, lean, standard, deep'
+
+# Rejects: an explicit resume that asks the selector or keeps the old reason.
+fake herdr exit p-capped
+exec ness open --resume $C --tier lean --reason 'cheaper now'
+store session $C tier=lean router_reason='explicit: cheaper now'
+
+# Rejects: a command selector that is not run, not fed the brief as JSON, or whose offset is
+# ignored: offset -1 from standard is lean (opus/low).
+cp ../command.toml .ness/ness.toml
+exec git commit -q -am 'command selector'
+exec ness open --root --scope cmd --brief ../brief.md
+store last-session M
+store session $M tier=lean
+fake herdr args '--model opus --effort low '
+exec grep '"role": *"root"' ../sel.in
+exec grep '"text": *"# Brief' ../sel.in
+
+-- ness.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"
+[launch]
+ready_timeout = "200ms"
+-- ceiling.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"
+[launch]
+ready_timeout = "200ms"
+[models]
+ceiling = "deep"
+[models.kinds]
+design = 2
+-- command.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"
+[launch]
+ready_timeout = "200ms"
+[models]
+policy = "command"
+command = "sh ../sel.sh"
+-- sel.sh --
+cat > ../sel.in
+echo '{"offset": -1, "confidence": 0.9, "reason": "small edit"}'
+-- brief.md --
+# Brief
+
+Do the thing.
+-- t.jsonl --
+{"type":"user","timestamp":"2026-10-09T10:00:00.000Z","message":{"role":"user","content":"do it"}}
+{"type":"assistant","timestamp":"2026-10-09T10:00:04.000Z","message":{"model":"claude-opus-5-5","usage":{"input_tokens":100,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":10},"content":[{"type":"text","text":"ok"}],"id":"msg_1"}}

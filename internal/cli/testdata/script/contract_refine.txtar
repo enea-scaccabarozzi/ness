@@ -1,0 +1,133 @@
+# A .feature file freezes scenario by scenario: added scenarios and reordering pass check, an edit
+# or a removal fails naming the scenario, amend opens it; a file matching [contracts] prefix
+# freezes as an append-only prefix (formatter changes pass, appended text passes, an edit fails);
+# any other file, and an old whole-file entry for a .feature, stays whole-file; the owner cannot
+# amend without an item from its manager or the operator; the hook warns on a scenario or prefix
+# lock and refuses a whole-file one.
+# covers: R-CTR-001, R-CTR-030, R-CTR-031, R-CTR-032, R-CTR-033, R-CTR-034, R-CTR-035, R-CTR-036, R-CTR-037
+cd repo
+exec ness init --gate true --base main --yes
+exec sh -c 'printf "features = [\"contracts\"]\n[contracts]\nprefix = [\"exp/*/spec.md\", \"steps.*\"]\n" >> .ness/ness.toml'
+exec sh -c 'mkdir -p exp/one && cp ../pay.feature pay.feature && cp ../spec.md exp/one/spec.md && printf "step\n" > steps.go && cp ../legacy.feature legacy.feature'
+exec sh -c 'mkdir -p docs/sessions/old && printf "%s legacy.feature\n" "$(git hash-object legacy.feature)" > docs/sessions/old/contract.lock'
+exec git add -A
+exec git commit -q -m 'ness init'
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+exec ness send --to $R --body 'approved: amend pay.feature'
+store last $R IR
+env NESS_SESSION=$R
+exec sh -c 'cd .worktrees/r-* && ness contract freeze pay.feature exp/one/spec.md steps.go'
+exec sh -c 'cd .worktrees/r-* && grep -c "^scn:" docs/sessions/r/contract.lock'
+stdout '^1$'
+exec sh -c 'cd .worktrees/r-* && grep -c "^scenario " docs/sessions/r/contract.lock'
+stdout '^2$'
+exec sh -c 'cd .worktrees/r-* && grep -c "^prefix:" docs/sessions/r/contract.lock'
+stdout '^1$'
+exec sh -c 'cd .worktrees/r-* && grep "^$(git hash-object steps.go) steps.go$" docs/sessions/r/contract.lock'
+exec sh -c 'cd .worktrees/r-* && git add -A && git commit -q -m freeze && ness contract check'
+stdout '^ok\t4 frozen files$'
+# Additions and reordering are free.
+exec sh -c 'cd .worktrees/r-* && printf "\n  Scenario: extra\n    Given more\n" >> pay.feature && ness contract check'
+exec sh -c 'cd .worktrees/r-* && git checkout -- pay.feature'
+exec sh -c 'cd .worktrees/r-* && cp $WORK/reordered.feature pay.feature && ness contract check'
+# An edit of a locked scenario fails, naming it; so does a removal.
+exec sh -c 'cd .worktrees/r-* && sed -i "s/Then it works/Then it fails/" pay.feature'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stdout '^differs\tpay\.feature\tdocs/sessions/r/contract\.lock\tscenario "pays" edited$'
+exec sh -c 'cd .worktrees/r-* && git checkout -- pay.feature && sed -i "/^  Scenario: pays/,/Then it works/d" pay.feature'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stdout 'scenario "pays" removed'
+exec sh -c 'cd .worktrees/r-* && git checkout -- pay.feature'
+# A Bash-written loosening of the lock is caught (the scenario lines are bound to the entry).
+exec sh -c 'cd .worktrees/r-* && sed -i "/\tpays$/d" docs/sessions/r/contract.lock'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stderr 'do not match'
+exec sh -c 'cd .worktrees/r-* && git checkout -- docs/sessions/r/contract.lock'
+# The prefix file: appended text and a reflow pass, an edit fails.
+exec sh -c 'cd .worktrees/r-* && printf "\n## Amendment 2026-10-21\n\nMore.\n" >> exp/one/spec.md && ness contract check'
+exec sh -c 'cd .worktrees/r-* && git checkout -- exp/one/spec.md && sed -i "s/^- /* /; s/ runs\\.//" exp/one/spec.md'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stdout '^differs\texp/one/spec\.md\t'
+exec sh -c 'cd .worktrees/r-* && git checkout -- exp/one/spec.md && sed -i "s/^- /* /" exp/one/spec.md && ness contract check'
+exec sh -c 'cd .worktrees/r-* && git checkout -- exp/one/spec.md'
+# A non-feature, non-prefix file is whole-file; an old whole-file .feature entry stays whole-file.
+exec sh -c 'cd .worktrees/r-* && printf "more\n" >> steps.go'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stdout '^differs\tsteps\.go\tdocs/sessions/r/contract\.lock$'
+exec sh -c 'cd .worktrees/r-* && git checkout -- steps.go && printf "\n  Scenario: more\n    Given x\n" >> legacy.feature'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stdout '^differs\tlegacy\.feature\tdocs/sessions/old/contract\.lock$'
+exec sh -c 'cd .worktrees/r-* && git checkout -- legacy.feature'
+# The hook warns (and allows) on scenario and prefix locks, and refuses the whole-file lock.
+stdin ../edit-feature.json
+exec sh -c 'cd .worktrees/r-* && ness hook pre-tool'
+stdout 'additionalContext'
+stdout 'pay\.feature is locked'
+stdout 'ness send --to manager'
+stdin ../edit-steps.json
+exits 2 sh -c 'cd .worktrees/r-* && ness hook pre-tool'
+stderr 'steps\.go is frozen'
+# amend: the owner needs an item from its manager or the operator.
+exits 4 sh -c 'cd .worktrees/r-* && ness contract amend pay.feature --reason x'
+stderr 'ask your manager: ness send --to manager'
+exits 4 sh -c 'cd .worktrees/r-* && ness contract amend pay.feature --reason x --item nope'
+stderr 'no item nope'
+exec sh -c 'cd .worktrees/r-* && ness send --to operator --body "my own"'
+store last operator OWN
+exits 4 sh -c 'cd .worktrees/r-* && ness contract amend pay.feature --reason x --item $OWN'
+stderr 'not addressed to you from your manager'
+env NESS_TEST_NOW=2026-10-09T10:00:00Z
+exec sh -c 'cd .worktrees/r-* && ness contract amend pay.feature --reason "pays was wrong" --item $IR'
+exec sh -c 'cd .worktrees/r-* && grep -c "^Amend pay.feature: pays was wrong \[item $IR\] (2026-10-09)$" docs/sessions/r/decisions.md'
+stdout '^1$'
+exec sh -c 'cd .worktrees/r-* && ! grep "^scenario .* pay.feature" docs/sessions/r/contract.lock'
+exec sh -c 'cd .worktrees/r-* && sed -i "s/Then it works/Then it passes/" pay.feature && ness contract check'
+# freeze again records the new scenarios and closes the amendment.
+exec sh -c 'cd .worktrees/r-* && ness contract freeze pay.feature && sed -i "s/Then it passes/Then it dies/" pay.feature'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stdout 'scenario "pays" edited'
+
+-- b.md --
+b
+-- pay.feature --
+Feature: pay
+  Background:
+    Given a user
+
+  Scenario: pays
+    When they pay
+    Then it works
+
+  Scenario Outline: refunds
+    When they refund <n>
+    Examples:
+      | n |
+      | 1 |
+-- reordered.feature --
+Feature: pay
+  Background:
+    Given a user
+
+  Scenario Outline: refunds
+    When they refund <n>
+    Examples:
+      | n |
+      | 1 |
+
+  Scenario: pays
+    When they pay
+    Then it works
+-- legacy.feature --
+Feature: legacy
+  Scenario: old
+    Given x
+-- spec.md --
+# Spec
+
+- Hypothesis: **X** beats _Y_.
+- Stop after 100 runs.
+-- edit-feature.json --
+{"tool_name":"Edit","tool_input":{"file_path":"pay.feature"}}
+-- edit-steps.json --
+{"tool_name":"Edit","tool_input":{"file_path":"steps.go"}}

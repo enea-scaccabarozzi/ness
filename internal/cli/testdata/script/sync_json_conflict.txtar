@@ -1,0 +1,22 @@
+# A differing unrecorded key is a conflict for the whole file; other files still sync.
+# covers: R-SYNC-051, R-SYNC-055
+cd repo
+exits 3 ness sync
+stdout '^conflict \.claude/settings\.json'
+grep '"autoCompactWindow": 100000' .claude/settings.json
+grep '"autoCompactWindow": ?265000' .claude/settings.json.ness-new
+exists AGENTS.md
+cp ../invalid.json .claude/settings.json
+exits 1 ness sync
+stderr '\.claude/settings\.json: not a valid JSON object'
+cmp .claude/settings.json ../invalid.json
+
+-- repo/.ness/ness.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"
+-- repo/.claude/settings.json --
+{"autoCompactWindow": 100000}
+-- invalid.json --
+{"autoCompactWindow":

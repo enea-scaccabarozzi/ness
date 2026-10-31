@@ -1,0 +1,41 @@
+# ness worker run refuses without herdr or below the tested version, works without systemd and
+# writes the heartbeat status shows, hints an idle session once and logs it, never hints a pulled
+# item, and refuses beside another worker of the project.
+# covers: R-WRK-001, R-WRK-005, R-WRK-007, R-WRK-008, R-WRK-012, R-WRK-023, R-SESS-082
+cd repo
+exec ness init --gate true --base main --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+env NESS_TEST_NOW=2026-10-08T10:00:00Z
+# herdr old: refused before anything is written.
+fake herdr version 0.5.0
+exits 4 ness worker run --once
+stderr 'herdr 0\.5\.0 is not supported'
+! exists .git/ness/worker.log
+fake herdr version 0.8.2
+# No systemd: run still works and never asks systemctl.
+fake fail 'systemctl --user is-system-running' 'Failed to connect to bus'
+exec ness worker run --once
+fake calls systemctl 0
+exec ness status
+stdout '^worker: 0\.1\.0 heartbeat 0s$'
+# A ready session with an unread item gets one hint, logged; a pulled item is never hinted again.
+exec ness open --root --scope prog --tier standard --brief ../b.md
+store last-session R
+exec ness send --to $R --body 'hello root'
+exec ness worker run --once
+fake herdr typed 1
+exec grep ' hint s-' .git/ness/worker.log
+exec sh -c 'NESS_SESSION=$R ness inbox'
+exec ness worker run --once
+fake herdr typed 1
+# Another worker holds the lock: the second refuses, naming it.
+[exec:flock] exits 4 sh -c 'flock -n .git/ness/worker.lock -c "ness worker run --once"'
+[exec:flock] stderr 'another worker runs for this project'
+# herdr not installed at all.
+fake missing herdr
+exits 4 ness worker run --once
+stderr 'herdr is required'
+
+-- b.md --
+b

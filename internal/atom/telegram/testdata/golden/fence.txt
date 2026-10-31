@@ -1,0 +1,2 @@
+<pre><code class="language-sh">make validate
+echo &#34;a &amp; b &lt; c&#34;</code></pre>

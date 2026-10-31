@@ -1,0 +1,84 @@
+# Only the manager (child) or the operator (root) closes; close needs report.md, no open
+# children, no obligations and a recorded integration unless --discard; a successful close
+# removes the worktree and a child's tab (a root's stays), deletes the branch only when
+# integrated, keeps the row as closed with its note; --keep-work keeps worktree and branch and
+# records the reason; items addressed to the closed session are retired.
+# covers: R-SESS-060, R-SESS-061, R-SESS-062, R-SESS-064, R-SESS-065, R-SESS-067, R-SESS-068, R-SESS-069, R-SESS-072, R-SESS-086, R-SESS-122
+cd repo
+exec ness init --gate true --base main --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+exec sh -c 'cd .worktrees/r-* && NESS_SESSION=$R ness open --scope c --tier standard --brief ../../../b.md'
+store last-session C
+exec sh -c 'cd .worktrees/c-* && NESS_SESSION=$C ness open --scope g --tier standard --brief ../../../b.md'
+store last-session G
+exec sh -c 'cd .worktrees/r-* && NESS_SESSION=$R ness open --scope d --tier standard --brief ../../../b.md'
+store last-session D
+fake herdr tabs 4
+# Rights.
+env NESS_SESSION=$D
+exits 4 ness close $C
+stderr 'manager'
+env NESS_SESSION=$R
+exits 4 ness close $R
+stderr 'operator'
+# No report.
+exits 4 ness close $C
+stderr 'docs/sessions/r/c/report\.md'
+exec sh -c 'cd .worktrees/c-* && printf "## Lessons\nNone.\n" > docs/sessions/r/c/report.md && git add -A && git commit -q -m report'
+# Open child.
+exits 4 ness close $C
+stderr $G
+exec sh -c 'cd .worktrees/g-* && printf "## Lessons\nNone.\n" > docs/sessions/r/c/g/report.md && git add -A && git commit -q -m report'
+env NESS_SESSION=$C
+exec ness close $G --discard --note 'nothing to keep'
+stdout '^closed s-[0-9a-f]{12} \(g\)$'
+store session $G closed=true 'close_note=nothing to keep' keep_reason=
+# Discard keeps the branch; the worktree and the tab are gone.
+exec git branch --list 'session/g-*'
+stdout 'session/g-'
+exec git worktree list
+! stdout 'worktrees/g-'
+fake herdr tabs 3
+# No integration recorded: refused.
+env NESS_SESSION=$R
+exits 4 ness close $C
+stderr 'integrat'
+exec sh -c 'cd .worktrees/c-* && NESS_SESSION=$C ness integrate --subject "feat: x"'
+# A pending fyi to C is retired by the close (an fyi is no obligation, so --keep-work is reached).
+exec ness send --to $C --body 'late news' --intent fyi
+store items $C 1
+exec ness close $C --keep-work 'keep for the demo' --note 'merged'
+store session $C closed=true 'close_note=merged' 'keep_reason=keep for the demo'
+store items $C 0
+exec git worktree list
+stdout 'worktrees/c-'
+exec git branch --list 'session/c-*'
+stdout 'session/c-'
+fake herdr tabs 2
+# A plain close after integration deletes the branch.
+exec sh -c 'cd .worktrees/d-* && printf "## Lessons\nNone.\n" > docs/sessions/r/d/report.md && git add -A && git commit -q -m report && NESS_SESSION=$D ness integrate --subject "feat: x"'
+exec ness close $D --note ok
+store session $D closed=true close_note=ok keep_reason=
+exec git branch --list 'session/d-*'
+! stdout .
+exec git worktree list
+! stdout 'worktrees/d-'
+fake herdr tabs 1
+# The operator closes the root after its report and integration; its tab stays readable.
+env NESS_SESSION=
+exec sh -c 'cd .worktrees/r-* && printf "## Lessons\nNone.\n" > docs/sessions/r/report.md && git add -A && git commit -q -m report && NESS_SESSION=$R ness integrate --subject "feat: x"'
+exec ness close $R --note 'program done'
+store session $R closed=true
+fake herdr tabs 1
+exec git worktree list
+! stdout 'worktrees/r-'
+exec ness status --all
+stdout '\tr\tstandard full\tclosed\t'
+exec ness status
+! stdout '\tr\t'
+
+-- b.md --
+b

@@ -1,0 +1,37 @@
+# Sync writes exactly the planned paths and the lock, nothing outside the repository, no feature
+# text unless enabled, and ignores per-user config trees.
+# covers: R-SYNC-003, R-SYNC-006, R-SYNC-072, R-CFG-001, R-CFG-006
+cd repo
+mkdir $HOME/.config/ness $WORK/xdg/ness
+cp ../evil.toml $HOME/.config/ness/ness.toml
+cp ../evil.toml $WORK/xdg/ness/ness.toml
+env XDG_CONFIG_HOME=$WORK/xdg
+snap home $HOME
+exec ness sync
+samesnap home $HOME
+exec git status --porcelain --untracked-files=all
+cmp stdout ../status.txt
+grep '\A# ness:begin core/ignore\n\.worktrees/\n\*\.ness-new\n# ness:end core/ignore\n\z' .gitignore
+
+-- repo/.ness/ness.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"
+-- evil.toml --
+profiles = ["nope"]
+client = "codex"
+-- status.txt --
+?? .agents/skills/ness-entry/SKILL.md
+?? .agents/skills/ness-launch/SKILL.md
+?? .claude/agents/ness-design.md
+?? .claude/agents/ness-review.md
+?? .claude/agents/ness-sweep.md
+?? .claude/agents/ness-verify.md
+?? .claude/settings.json
+?? .claude/skills
+?? .gitignore
+?? .ness/lock.json
+?? .ness/ness.toml
+?? AGENTS.md
+?? CLAUDE.md

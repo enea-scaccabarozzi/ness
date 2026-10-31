@@ -1,0 +1,51 @@
+# integrate.mode = rebase replays the session's commits on main with no merge commit; with push,
+# integrate first catches main up with what someone else pushed to origin, so the push is a
+# fast-forward; a local main that diverged from origin is refused.
+# covers: R-SESS-118, R-SESS-119
+exec git init -q --bare -b main origin.git
+cd repo
+exec ness init --gate true --base main --yes
+cp ../rebase.toml .ness/ness.toml
+exec git add -A
+exec git commit -q -m 'ness init'
+exec git remote add origin ../origin.git
+exec git push -q origin main
+# Someone else integrates first.
+exec git clone -q ../origin.git ../other
+exec sh -c 'cd ../other && echo o > other.txt && git add other.txt && git -c user.email=t@x -c user.name=t commit -q -m other && git push -q origin main'
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+exec sh -c 'cd .worktrees/r-* && echo a > a.txt && git add -A && git commit -q -m one && echo b > b.txt && git add -A && git commit -q -m two'
+exec sh -c 'cd .worktrees/r-* && NESS_SESSION=$R ness integrate'
+exec git log --format=%s main
+stdout '^two\none\nother\nness init'
+exec git rev-list --merges main
+! stdout .
+exec git rev-parse main
+cp stdout ../local
+exec git --git-dir=../origin.git rev-parse main
+cmp stdout ../local
+# Integrated by patch: the session branch keeps its own shas, close sees it landed.
+exec sh -c 'cd .worktrees/r-* && printf "## Lessons\nNone.\n" > docs/sessions/r/report.md && git add -A && git commit -q -m report && NESS_SESSION=$R ness integrate'
+exec ness close $R --note n
+store session $R closed=true
+# Diverged: a local main commit origin lacks while origin moved on.
+exec sh -c 'cd ../other && git pull -q && echo p > p.txt && git add p.txt && git -c user.email=t@x -c user.name=t commit -q -m p && git push -q origin main'
+exec sh -c 'echo l > l.txt && git add l.txt && git commit -q -m local'
+exec ness open --root --scope s --tier standard --brief ../b.md
+store last-session S
+exec sh -c 'cd .worktrees/s-* && echo c > c.txt && git add -A && git commit -q -m c'
+exec sh -c 'cd .worktrees/s-* && NESS_SESSION=$S ness integrate 2>&1; echo "exit $?"'
+stdout 'have diverged'
+! stdout 'exit 0'
+
+-- b.md --
+b
+-- rebase.toml --
+ness = "0.1"
+project = "repo"
+base = "main"
+gate = "true"
+[integrate]
+mode = "rebase"
+push = true

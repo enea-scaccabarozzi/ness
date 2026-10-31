@@ -1,0 +1,9 @@
+[0m[38;2;153;153;153m[48;2;55;55;55m❯ [0m[38;2;255;255;255m[48;2;55;55;55mYou are ness session s-0c8a4af43c06 (list-open). Read docs/sessions/todo-undo-open/list-open/brief.md, then load ness-entry.[0m[48;2;55;55;55m              [0m
+
+  [0m[38;2;153;153;153mRead [0m[1m[38;2;153;153;153m1[0m[38;2;153;153;153m file [0m
+
+[0m[38;2;78;186;101m● [0m[1mSkill[0m(ness-entry)
+[0m[38;2;153;153;153m  ⎿  [0mSuccessfully loaded skill
+
+[0m[38;2;153;153;153m  [0mRunning sed -n 1,45p main_test.go; sed -n 1,20p main.go
+[0m[38;2;153;153;153m  ⎿  $ sed -n 1,45p main_test.go; sed -n 1,20p main.go[0m

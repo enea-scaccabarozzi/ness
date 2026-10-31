@@ -1,0 +1,48 @@
+# ness close refuses a report without a ## Lessons heading, --discard included, whether the
+# worktree is there or was deleted by hand (the report is then read from the branch). The
+# refusal names the heading and ends with the rule's place; a one-line "None." passes.
+# covers: R-SESS-153, R-SESS-061
+cd repo
+exec ness init --gate true --base main --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+# Worktree present, report without Lessons.
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+exec sh -c 'cd .worktrees/r-* && echo done > docs/sessions/r/report.md && git add -A && git commit -q -m report && NESS_SESSION=$R ness integrate --subject "feat: x"'
+exits 4 ness close $R
+stderr '## Lessons'
+stderr 'skill ness-entry, section Lessons'
+exits 4 ness close $R --discard
+stderr '## Lessons'
+store session $R closed=false
+# A deeper heading is not the heading.
+exec sh -c 'cd .worktrees/r-* && printf "### Lessons\nx\n" > docs/sessions/r/report.md && git add -A && git commit -q -m h3 && NESS_SESSION=$R ness integrate --subject "feat: y"'
+exits 4 ness close $R
+stderr '## Lessons'
+# One line under the heading is enough.
+exec sh -c 'cd .worktrees/r-* && printf "## Lessons\nNone.\n" > docs/sessions/r/report.md && git add -A && git commit -q -m lessons && NESS_SESSION=$R ness integrate --subject "feat: z"'
+exec ness close $R
+stdout 'closed'
+store session $R closed=true
+# Worktree gone: the report committed on the branch is checked.
+exec ness open --root --scope g --tier standard --brief ../b.md
+store last-session G
+exec sh -c 'cd .worktrees/g-* && echo done > docs/sessions/g/report.md && git add -A && git commit -q -m report && NESS_SESSION=$G ness integrate --subject "feat: g"'
+exec sh -c 'rm -rf .worktrees/g-*'
+exits 4 ness close $G
+stderr '## Lessons'
+stderr 'skill ness-entry, section Lessons'
+exits 4 ness close $G --discard
+stderr '## Lessons'
+store session $G closed=false
+exec ness open --root --scope h --tier standard --brief ../b.md
+store last-session H
+exec sh -c 'cd .worktrees/h-* && printf "# Report\n## Lessons\nNone.\n" > docs/sessions/h/report.md && git add -A && git commit -q -m report && NESS_SESSION=$H ness integrate --subject "feat: h"'
+exec sh -c 'rm -rf .worktrees/h-*'
+exec ness close $H
+stdout 'closed'
+store session $H closed=true
+
+-- b.md --
+b

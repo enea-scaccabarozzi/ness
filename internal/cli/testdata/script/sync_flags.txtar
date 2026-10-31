@@ -1,0 +1,47 @@
+# --check and --dry-run write nothing; their exit codes are 0 clean, 1 changes, 3 conflict.
+# covers: R-SYNC-030, R-SYNC-031, R-SYNC-034, R-CFG-038
+cd repo
+snap before
+exits 1 ness sync --check
+stdout '^create AGENTS.md#core/router$'
+samesnap before
+exec ness sync --dry-run
+stdout '^create AGENTS.md#core/router$'
+stdout '^@@ '
+samesnap before
+exec ness sync --dry-run --json
+stdout '"schema": 1'
+stdout '"action": "create"'
+samesnap before
+exits 2 ness sync --json
+exec ness sync
+exec ness sync --check
+cp ../x2.md .ness/profiles/local/x.md
+exits 1 ness sync --check
+cp ../mine.md docs/x.md
+cp ../y2.md .ness/profiles/local/y.md
+exits 3 ness sync --check
+exits 3 ness sync --dry-run
+! exists docs/x.md.ness-new
+
+-- repo/.ness/ness.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"
+profiles = ["local"]
+-- repo/.ness/profiles/local/profile.toml --
+name = "local"
+[files]
+"docs/x.md" = { own = "x.md" }
+"docs/y.md" = { own = "y.md" }
+-- repo/.ness/profiles/local/x.md --
+x1
+-- repo/.ness/profiles/local/y.md --
+y1
+-- y2.md --
+y2
+-- x2.md --
+x2
+-- mine.md --
+mine

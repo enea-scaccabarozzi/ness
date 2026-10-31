@@ -1,0 +1,11 @@
+name    = "core"
+summary = "ness core: the AGENTS.md router and the lifecycle skills"
+
+[slots]
+"AGENTS.md#router" = { block = "router.md" }
+"ness-entry#autonomy-default" = { set = "autonomy-default.md" }
+"ness-entry#post-compact" = { append = "post-compact.md" }
+
+[files]
+".agents/skills/ness-entry/SKILL.md"  = { own = "skills/ness-entry/SKILL.md" }
+".agents/skills/ness-launch/SKILL.md" = { own = "skills/ness-launch/SKILL.md" }

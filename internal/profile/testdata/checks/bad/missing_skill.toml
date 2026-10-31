@@ -1,0 +1,9 @@
+# want: skill
+name = "local"
+
+[[checks]]
+id = "c1"
+on = "open"
+section = "Communicate"
+message = "fix it"
+kind = "checkpoint-since-landing"

@@ -1,0 +1,95 @@
+# The judge always comes from the merge-base: the units command runs in an export of the
+# merge-base tree, so a branch that weakens a unit cannot also change the extractor, a file it
+# sources or imports, or a command that is not a bare repo path; the text under test arrives on
+# stdin only. A project-wide format file with no units at base is soft in check as in the hook.
+# covers: R-CTR-048, R-CTR-052, R-CTR-053
+cd repo
+exec ness init --gate true --base main --yes
+exec sh -c 'cat ../cfg.toml >> .ness/ness.toml'
+exec sh -c 'mkdir -p tools specs py q empty && cp ../t/* tools/ && chmod +x tools/*'
+exec sh -c 'cp ../a.fmt specs/a.fmt && cp ../a.fmt py/a.fmt && cp ../a.fmt q/a.fmt && printf "nothing\n" > empty/e.fmt'
+exec git add -A
+exec git commit -q -m 'ness init'
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+env NESS_SESSION=$R
+exec sh -c 'cd .worktrees/r-* && ness contract freeze specs/a.fmt py/a.fmt q/a.fmt'
+# A command that is not a file of the merge-base is the environment's: freeze says so.
+stderr 'comes from the environment'
+exec sh -c 'cd .worktrees/r-* && git add -A && git commit -q -m freeze && ness contract check'
+stdout '^ok'
+# A1: weaken a unit and the helper the judge sources: the base helper still judges.
+exec sh -c 'cd .worktrees/r-* && sed -i "s/unit b: two/unit b: WEAK/" specs/a.fmt && cp $WORK/att/lib.sh tools/lib.sh'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stdout 'unit "b" changed'
+exec sh -c 'cd .worktrees/r-* && git checkout -- .'
+# A2: shadow a stdlib module next to a python judge.
+exec sh -c 'cd .worktrees/r-* && sed -i "s/unit b: two/unit b: WEAK/" py/a.fmt && cp $WORK/att/json.py tools/json.py'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stdout 'unit "b" changed'
+exec sh -c 'cd .worktrees/r-* && git checkout -- . && rm -rf tools/json.py tools/__pycache__'
+# A3: a quoted judge path is no longer a way out.
+exec sh -c 'cd .worktrees/r-* && sed -i "s/unit b: two/unit b: WEAK/" q/a.fmt && cp $WORK/att/fixed.sh tools/q.sh'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stdout 'unit "b" changed'
+exec sh -c 'cd .worktrees/r-* && git checkout -- .'
+# The judge edited on the branch is simply not used.
+exec sh -c 'cd .worktrees/r-* && sed -i "s/unit b: two/unit b: WEAK/" specs/a.fmt && cp $WORK/att/fixed.sh tools/units.sh'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stdout 'unit "b" changed'
+exec sh -c 'cd .worktrees/r-* && git checkout -- .'
+# A5: a project-wide format file with no units at base: the hook says adding is fine, and so does check.
+stdin $WORK/edit-empty.json
+exec sh -c 'cd .worktrees/r-* && ness hook pre-tool'
+stdout 'adding is fine'
+exec sh -c 'cd .worktrees/r-* && printf "unit new: x\n" >> empty/e.fmt && ness contract check'
+stdout '^ok'
+
+-- b.md --
+b
+-- cfg.toml --
+features = ["contracts"]
+[contracts]
+frozen = ["empty/*.fmt"]
+[contracts.formats.src]
+match = ["specs/*.fmt"]
+units = "tools/units.sh"
+[contracts.formats.py]
+match = ["py/*.fmt"]
+units = "tools/pyunits.py"
+[contracts.formats.quoted]
+match = ["q/*.fmt"]
+units = "\"tools/q.sh\""
+[contracts.formats.empty]
+match = ["empty/*.fmt"]
+units = "tools/plain.sh"
+-- t/units.sh --
+#!/bin/sh
+. tools/lib.sh
+extract
+-- t/lib.sh --
+extract() { sed -n 's/^unit \([^:]*\): \(.*\)$/{"id":"\1","body":"\2"}/p'; }
+-- t/pyunits.py --
+#!/usr/bin/env python3
+import json, re, sys
+for m in re.finditer(r"^unit ([^:]*): (.*)$", sys.stdin.read(), re.M):
+    print(json.dumps({"id": m.group(1), "body": m.group(2)}))
+-- t/q.sh --
+#!/bin/sh
+sed -n 's/^unit \([^:]*\): \(.*\)$/{"id":"\1","body":"\2"}/p'
+-- t/plain.sh --
+#!/bin/sh
+sed -n 's/^unit \([^:]*\): \(.*\)$/{"id":"\1","body":"\2"}/p'
+-- att/lib.sh --
+extract() { cat >/dev/null; printf '{"id":"a","body":"one"}\n{"id":"b","body":"two"}\n'; }
+-- att/json.py --
+def dumps(o):
+    return '{"id": "%s", "body": "%s"}' % (o["id"], {"b": "two"}.get(o["id"], o["body"]))
+-- att/fixed.sh --
+#!/bin/sh
+cat >/dev/null; printf '{"id":"a","body":"one"}\n{"id":"b","body":"two"}\n'
+-- a.fmt --
+unit a: one
+unit b: two
+-- edit-empty.json --
+{"tool_name":"Edit","tool_input":{"file_path":"empty/e.fmt"}}

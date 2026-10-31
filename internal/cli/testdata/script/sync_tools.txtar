@@ -1,0 +1,17 @@
+# A tool a profile requires must be on PATH before anything is written.
+# covers: R-SYNC-005, R-PROF-016, R-CFG-036
+cd repo
+snap before
+exits 4 ness sync
+stderr 'profile local requires nonexistent-tool-xyz, which is not on PATH'
+samesnap before
+
+-- repo/.ness/ness.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"
+profiles = ["local"]
+-- repo/.ness/profiles/local/profile.toml --
+name = "local"
+requires_tools = ["nonexistent-tool-xyz"]

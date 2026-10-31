@@ -1,0 +1,60 @@
+# The subagent hook judges on Claude's ladder whatever the project's client, refuses a rung above
+# models.ceiling even with an escalate, and refuses an invalid models.enforce as a config error.
+# covers: R-HOOK-034, R-HOOK-036, R-MOD-043, R-MOD-060
+cd repo
+exec ness init --gate true --base main --yes
+cp ../ceiling.toml .ness/ness.toml
+exec git add -A
+exec git commit -q -m 'ness init'
+store add-launch s-aaaaaaaaaaaa root - tier=standard client=claude
+env NESS_SESSION=s-aaaaaaaaaaaa
+
+# Rejects: an escalate that buys a rung above the ceiling when the recommendation sits at it.
+stdin ../design-frontier.json
+exits 2 ness hook pre-tool
+stderr 'above the ceiling deep'
+
+# Rejects: a hook that builds the ladder for the project's client (codex) instead of Claude's.
+cp ../codex.toml .ness/ness.toml
+exec git commit -q -am 'client codex'
+stdin ../at.json
+exec ness hook pre-tool
+! stderr .
+# (and the config is valid, so the pass above is not the hook failing open)
+stdin ../above.json
+exits 2 ness hook pre-tool
+stderr 'opus/medium'
+
+# Rejects: an enforce value other than refuse or log accepted (dropping the oneOf check).
+cp ../badenforce.toml .ness/ness.toml
+exec git commit -q -am 'bad enforce'
+! exec ness pick --kind search
+stderr 'models.enforce'
+
+-- design-frontier.json --
+{"tool_name":"Agent","tool_input":{"description":"d","prompt":"kind: design\nescalate: hard\nweigh x","subagent_type":"general-purpose","model":"fable","effort":"medium"}}
+-- at.json --
+{"tool_name":"Agent","tool_input":{"description":"d","prompt":"kind: search\nfind x","subagent_type":"general-purpose","model":"sonnet","effort":"medium"}}
+-- above.json --
+{"tool_name":"Agent","tool_input":{"description":"d","prompt":"kind: search\nfind x","subagent_type":"general-purpose","model":"opus","effort":"medium"}}
+-- ceiling.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"
+[models]
+ceiling = "deep"
+-- codex.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"
+client = "codex"
+experimental = ["codex"]
+-- badenforce.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"
+[models]
+enforce = "warn"

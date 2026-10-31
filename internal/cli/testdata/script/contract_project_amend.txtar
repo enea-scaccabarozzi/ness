@@ -1,0 +1,57 @@
+# ness contract amend opens a project-wide frozen path for this branch when the operator's words
+# are in the session's transcript: the decisions.md line is written and check accepts the edit.
+# Without --authorized, or with words the operator never typed, a session is refused (exit 4) and
+# nothing is logged. An amend line already present at the merge-base does not open a later edit.
+# amend takes several paths, one decisions line each, and writes nothing when one of them is bad;
+# a project-wide file deleted on the branch is opened the same way.
+# covers: R-CTR-005, R-CTR-056
+cd repo
+exec ness init --gate true --base main --yes
+exec sh -c 'printf "features = [\"contracts\"]\n[contracts]\nfrozen = [\"steps.go\", \"gone.go\"]\n" >> .ness/ness.toml'
+exec sh -c 'printf "step\n" > steps.go && printf "gone\n" > gone.go && mkdir -p docs/sessions/old && cp ../old-decisions.md docs/sessions/old/decisions.md'
+exec git add -A
+exec git commit -q -m 'ness init'
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+store get $R client_session CS
+env NESS_SESSION=$R
+# The base's old amend line does not open the file again.
+exec sh -c 'cd .worktrees/r-* && printf "more\n" >> steps.go && git commit -q -am edit'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stdout '^differs\tsteps\.go\t'
+# No words: refused with the route.
+exits 4 sh -c 'cd .worktrees/r-* && ness contract amend steps.go --reason r'
+stderr 'authorized'
+# Words the operator never typed: refused.
+exec sh -c 'd=$(cd .worktrees/r-* && pwd -P | sed "s/[^A-Za-z0-9]/-/g"); mkdir -p $HOME/.claude/projects/$d; cp ../typed.jsonl $HOME/.claude/projects/$d/$CS.jsonl'
+exits 4 sh -c 'cd .worktrees/r-* && ness contract amend steps.go --reason r --authorized "drop the gate"'
+exec sh -c '! grep -qs "Amend steps.go" .worktrees/r-*/docs/sessions/r/decisions.md'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+# The operator's words: logged, and check passes.
+exec sh -c 'cd .worktrees/r-* && ness contract amend steps.go --reason r --authorized "amend steps.go"'
+stdout '^amending steps\.go \(project-wide, by the operator.s words\); it lands with this branch$'
+exec sh -c 'cat .worktrees/r-*/docs/sessions/r/decisions.md'
+stdout '^Amend steps\.go \(project-wide\): r \[operator: "amend steps\.go"\] \([0-9]{4}-[0-9]{2}-[0-9]{2}\)$'
+exec sh -c 'cd .worktrees/r-* && git add -A && git commit -q -m amend && ness contract check'
+stdout '^ok\t'
+# Several paths, one of them deleted on the branch; a path that is not frozen refuses them all.
+exec sh -c 'cd .worktrees/r-* && git rm -q gone.go && printf "again\n" >> steps.go'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stdout '^differs\tgone\.go\t'
+exits 4 sh -c 'cd .worktrees/r-* && ness contract amend steps.go gone.go notes.txt --reason r2 --authorized "amend steps.go"'
+stderr 'notes\.txt is not frozen'
+exec sh -c '! grep -qs "r2" .worktrees/r-*/docs/sessions/r/decisions.md'
+exec sh -c 'cd .worktrees/r-* && ness contract amend steps.go gone.go --reason r2 --authorized "amend steps.go"'
+stdout '^amending steps\.go \(project-wide'
+stdout '^amending gone\.go \(project-wide'
+exec sh -c 'grep -c "^Amend \(steps\|gone\)\.go (project-wide): r2 " .worktrees/r-*/docs/sessions/r/decisions.md'
+stdout '^2$'
+exec sh -c 'cd .worktrees/r-* && git add -A && git commit -q -m amend2 && ness contract check'
+stdout '^ok\t'
+
+-- b.md --
+brief
+-- old-decisions.md --
+Amend steps.go (project-wide): old change [operator: "amend steps.go"] (2026-10-01)
+-- typed.jsonl --
+{"type":"user","message":{"role":"user","content":"fine, amend steps.go for the new step"},"promptSource":"typed","origin":{"kind":"human"}}

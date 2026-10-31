@@ -1,0 +1,10 @@
+name = "local"
+
+[[checks]]
+id = "l1"
+on = "open"
+skill = "ness-entry"
+section = "Communicate"
+message = "first"
+kind = "checkpoint-since-landing"
+

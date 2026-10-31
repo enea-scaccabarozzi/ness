@@ -1,0 +1,16 @@
+version: "2"
+# Test-code linters (test-discipline): no wall-clock sleep, helpers marked, modern testing APIs.
+run:
+  timeout: 10m
+  tests: true
+linters:
+  default: none
+  enable: [forbidigo, thelper, tparallel, usetesting]
+  settings:
+    forbidigo:
+      analyze-types: true
+      forbid:
+        - pattern: ^time\.Sleep$
+          msg: no wall-clock sleep in tests; use testing/synctest or pass now as a value (skill ness-test-discipline, section Rules)
+formatters:
+  enable: []

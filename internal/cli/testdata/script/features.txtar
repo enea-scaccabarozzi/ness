@@ -1,0 +1,41 @@
+# The feature set is the union of ness.toml and the applied profiles' [features] enable: a
+# profile enabling probes makes sync render the probes skill text; a command of a feature that
+# is off refuses (exit 4) naming the feature, and nothing is written.
+# covers: R-CFG-054, R-PROF-015
+cd repo
+exec ness init --gate true --base main --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+! exists .agents/skills/ness-probes/SKILL.md
+# Off: post and contract refuse naming their feature; the tree is untouched.
+snap before
+exits 4 ness post --channel x --file ../n.md
+stderr 'feature notify is off: add "notify" to features'
+exits 4 ness contract check
+stderr 'feature contracts is off: add "contracts" to features'
+samesnap before
+# A profile enables probes: sync renders the skill; doctor and status read the union.
+exec sh -c 'printf "profiles = [\"p\"]\n" >> .ness/ness.toml'
+exec ness sync
+exists .agents/skills/ness-probes/SKILL.md
+grep 'ness probe start' .agents/skills/ness-probes/SKILL.md
+exec ness status
+! stdout 'probes: none \(feature off\)'
+# ness.toml enables notify: the notify skill appears; the gate opens for post (which then
+# refuses for its own reasons: the channel does not exist).
+exec sh -c 'printf "features = [\"notify\"]\n" >> .ness/ness.toml'
+exec ness sync
+exists .agents/skills/ness-notify/SKILL.md
+exits 4 ness post --channel x --file ../n.md
+stderr 'no such channel x'
+# The profile goes: the probes skill goes with it.
+exec sh -c 'sed -i "/^profiles = /d" .ness/ness.toml'
+exec ness sync
+! exists .agents/skills/ness-probes/SKILL.md
+
+-- repo/.ness/profiles/p/profile.toml --
+name = "p"
+[features]
+enable = ["probes"]
+-- n.md --
+hello

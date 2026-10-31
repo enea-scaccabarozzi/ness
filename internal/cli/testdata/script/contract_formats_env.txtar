@@ -1,0 +1,28 @@
+# A project-wide judge that is a symlink checks clean on a pristine branch, and the extractor runs in
+# a throwaway export with a minimal environment: what it writes does not reach the repo.
+# covers: R-CTR-048, R-CTR-052
+cd repo
+exec ness init --gate true --base main --yes
+exec sh -c 'cat ../cfg.toml >> .ness/ness.toml'
+exec sh -c 'mkdir -p tools proj && cp ../impl.sh tools/impl.sh && chmod +x tools/impl.sh && ln -s impl.sh tools/link && cp ../p.fmt proj/p.fmt'
+exec git add -A
+exec git commit -q -m 'ness init'
+env SECRET_TOKEN=hunter2
+exec ness contract check
+stdout '^ok'
+! exists leak.txt
+! exists tools/leak.txt
+
+-- cfg.toml --
+features = ["contracts"]
+[contracts]
+frozen = ["proj/*.fmt"]
+[contracts.formats.lnk]
+match = ["proj/*.fmt"]
+units = "tools/link"
+-- impl.sh --
+#!/bin/sh
+env > leak.txt
+sed -n 's/^unit \([^:]*\): \(.*\)$/{"id":"\1","body":"\2"}/p'
+-- p.fmt --
+unit x: ex

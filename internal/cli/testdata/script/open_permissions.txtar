@@ -1,0 +1,39 @@
+# A launch skips the client's permission prompts by default; launch.permissions = "client" keeps the
+# client's own settings; any other value is refused by config. (Codex's bypass flag: open_env.)
+# covers: R-SESS-125
+cd repo
+exec ness init --gate true --base main --yes
+cp ../ness.toml .ness/ness.toml
+exec git add -A
+exec git commit -q -m 'ness init'
+exec ness open --root --scope a --tier standard --brief ../brief.md
+fake herdr args ' --dangerously-skip-permissions$'
+cp ../client.toml .ness/ness.toml
+exec ness open --root --scope b --tier standard --brief ../brief.md
+! fake herdr args 'dangerously'
+cp ../bad.toml .ness/ness.toml
+! exec ness open --root --scope c --tier standard --brief ../brief.md
+stderr 'launch.permissions'
+-- ness.toml --
+ness = "0.1"
+project = "demo-app"
+base = "main"
+gate = "true"
+-- client.toml --
+ness = "0.1"
+project = "demo-app"
+base = "main"
+gate = "true"
+[launch]
+permissions = "client"
+-- bad.toml --
+ness = "0.1"
+project = "demo-app"
+base = "main"
+gate = "true"
+[launch]
+permissions = "yolo"
+-- brief.md --
+# Brief
+
+Do the thing.

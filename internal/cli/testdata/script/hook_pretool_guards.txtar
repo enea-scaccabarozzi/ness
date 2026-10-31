@@ -1,0 +1,61 @@
+# For a bound session, pre-tool runs the default gate and launch-limits guards and the
+# [[guards]] of .ness/ness.toml: exit 2 with the message and the pointer on stderr. A command
+# no guard matches, and an unbound session, pass silently.
+# covers: R-HOOK-022, R-HOOK-023, R-HOOK-024, R-HOOK-014
+cd repo
+exec ness init --gate 'make validate' --base main --yes
+cp ../guards.toml .ness/ness.toml
+store add-session s-aaaaaaaaaaaa root
+env NESS_SESSION=s-aaaaaaaaaaaa
+stdin ../gate.json
+exits 2 ness hook pre-tool
+stderr 'make validate'
+stderr '\(skill ness-entry, section Tests\)'
+! stdout .
+stdin ../limits.json
+exits 2 ness hook pre-tool
+stderr '\(skill ness-launch, section Child or subagent\)'
+stdin ../pytest.json
+exits 2 ness hook pre-tool
+stderr 'Run the one test you changed'
+stderr '\(skill ness-entry, section Tests\)'
+stdin ../docs.json
+exec ness hook pre-tool
+! stdout .
+! stderr .
+stdin ../quote.json
+exec ness hook pre-tool
+! stdout .
+! stderr .
+env NESS_SESSION=
+stdin ../gate.json
+exec ness hook pre-tool
+! stdout .
+! stderr .
+stdin ../pytest.json
+exec ness hook pre-tool
+! stdout .
+! stderr .
+
+-- guards.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "make validate"
+
+[[guards]]
+tool    = "Bash"
+match   = '^pytest\s*$'
+message = "Run the one test you changed, not the suite."
+skill   = "ness-entry"
+section = "Tests"
+-- gate.json --
+{"tool_name":"Bash","tool_input":{"command":"cd x && make validate"}}
+-- limits.json --
+{"tool_name":"Edit","tool_input":{"file_path":".ness/ness.toml","old_string":"max_children = 0","new_string":"max_children = 8"}}
+-- pytest.json --
+{"tool_name":"Bash","tool_input":{"command":"pytest"}}
+-- docs.json --
+{"tool_name":"Bash","tool_input":{"command":"make validate-docs"}}
+-- quote.json --
+{"tool_name":"Edit","tool_input":{"file_path":".ness/ness.toml","old_string":"[launch]","new_string":""}}

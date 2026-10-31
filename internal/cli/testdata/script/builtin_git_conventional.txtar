@@ -1,0 +1,25 @@
+# git-conventional renders the guidance and a commit-msg hook that rejects a non-conventional
+# message once activated.
+# covers: R-BLT-001, R-BLT-080, R-BLT-081, R-QA-045
+cd repo
+exec ness init --gate true --base main --profile git-conventional --yes
+exec ness sync --check
+grep 'type\(scope\): subject' .agents/skills/ness-git-conventional/SKILL.md
+grep '^## Trailers' .agents/skills/ness-git-conventional/SKILL.md
+grep 'Co-Authored-By' .agents/skills/ness-git-conventional/SKILL.md
+grep 'git config core.hooksPath .githooks' .agents/skills/ness-git-conventional/SKILL.md
+exists .githooks/commit-msg
+exec git config core.hooksPath .githooks
+chmod 755 .githooks/commit-msg
+exec git add -A
+! exec git commit -q -m 'stuff'
+stderr 'not a Conventional Commit'
+exec git commit -q -m 'fix: x'
+exec git commit -q --allow-empty -m 'sessions(worker): restart after sync'
+exec git commit -q --allow-empty -m 'feat(cli)!: drop --model'
+! exec git commit -q --allow-empty -m 'feat: '
+! exec git commit -q --allow-empty -m 'feat:  spaced'
+! exec git commit -q --allow-empty -m 'fixes: x'
+exec git commit -q --allow-empty -m 'Merge branch x'
+exec git commit -q --allow-empty -m 'integrate session/s-1a2b into main'
+! exec git commit -q --allow-empty -m 'integrate session/s-1a2b'

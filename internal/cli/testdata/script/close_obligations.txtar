@@ -1,0 +1,61 @@
+# request, decision and handoff items block the recipient's close until disposed; a deferred
+# reply still blocks and stays listed, marked deferred; an fyi never blocks and stays listed
+# until shown; a reply item (the answer reaching the sender) blocks nothing.
+# covers: R-SESS-063, R-MSG-040, R-MSG-041, R-MSG-043, R-MSG-022
+cd repo
+exec ness init --gate true --base main --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+exec sh -c 'cd .worktrees/r-* && NESS_SESSION=$R ness open --scope c --tier standard --brief ../../../b.md'
+store last-session C
+exec sh -c 'cd .worktrees/c-* && printf "## Lessons\nNone.\n" > docs/sessions/r/c/report.md && git add -A && git commit -q -m report && NESS_SESSION=$C ness integrate --subject "feat: x"'
+env NESS_SESSION=$R
+exec ness send --to $C --body req --intent request
+store last $C REQ
+exec ness send --to $C --body dec --intent decision
+store last $C DEC
+exec ness send --to $C --body @../h.md --intent handoff
+store last $C HAND
+exec ness send --to $C --body fyi --intent fyi
+store last $C FYI
+exits 4 ness close $C
+stderr $REQ
+stderr $DEC
+stderr $HAND
+! stderr $FYI
+env NESS_SESSION=$C
+exec ness reply $REQ --body later --as deferred
+exec ness reply $DEC --body yes --as accepted
+exec ness reply $HAND --body taken --as accepted
+# Deferred stays listed, marked, and still blocks; the disposed ones no longer do.
+exec ness inbox
+stdout '^m-[a-z2-7]{8}\t\S+\trequest deferred\t'
+env NESS_SESSION=$R
+exits 4 ness close $C
+stderr $REQ
+! stderr $DEC
+! stderr $HAND
+env NESS_SESSION=$C
+exec ness reply $REQ --body now --as resolved
+# The fyi blocks nothing but is still listed until shown.
+exec ness inbox
+stdout 'fyi'
+# C's reply items landed in R's inbox and do not block R; the fyi to C does not block C.
+env NESS_SESSION=$R
+exec ness inbox
+stdout 'reply'
+exec ness close $C --note ok
+store session $C closed=true
+store items $C 0
+
+-- b.md --
+b
+-- h.md --
+## Done
+x
+## Now
+y
+## Next
+z

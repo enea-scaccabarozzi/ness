@@ -1,0 +1,49 @@
+# Twenty concurrent ness send processes with distinct bodies produce exactly twenty items.
+# Ten concurrent ness inbox processes on a fresh store all succeed (Review Focus 3).
+# covers: R-MSG-003
+cd repo
+exec ness init --gate true --base main --yes
+store add-session s-aaaaaaaaaaaa root
+store add-session s-bbbbbbbbbbbb child-b s-aaaaaaaaaaaa
+env NESS_SESSION=s-bbbbbbbbbbbb
+exec ness send --to manager --body 'body 01' &
+exec ness send --to manager --body 'body 02' &
+exec ness send --to manager --body 'body 03' &
+exec ness send --to manager --body 'body 04' &
+exec ness send --to manager --body 'body 05' &
+exec ness send --to manager --body 'body 06' &
+exec ness send --to manager --body 'body 07' &
+exec ness send --to manager --body 'body 08' &
+exec ness send --to manager --body 'body 09' &
+exec ness send --to manager --body 'body 10' &
+exec ness send --to manager --body 'body 11' &
+exec ness send --to manager --body 'body 12' &
+exec ness send --to manager --body 'body 13' &
+exec ness send --to manager --body 'body 14' &
+exec ness send --to manager --body 'body 15' &
+exec ness send --to manager --body 'body 16' &
+exec ness send --to manager --body 'body 17' &
+exec ness send --to manager --body 'body 18' &
+exec ness send --to manager --body 'body 19' &
+exec ness send --to manager --body 'body 20' &
+wait
+stdout -count=20 '^sent m-[a-z2-7]{8} to s-aaaaaaaaaaaa$'
+store items s-aaaaaaaaaaaa 20
+# Ten concurrent inbox listings on a store nobody has opened yet.
+cd $WORK
+mkdir fresh
+cd fresh
+exec git init -q
+exec ness init --gate true --base main --yes
+env NESS_SESSION=
+exec ness inbox &
+exec ness inbox &
+exec ness inbox &
+exec ness inbox &
+exec ness inbox &
+exec ness inbox &
+exec ness inbox &
+exec ness inbox &
+exec ness inbox &
+exec ness inbox &
+wait

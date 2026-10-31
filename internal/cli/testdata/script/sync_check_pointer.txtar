@@ -1,0 +1,46 @@
+# A profile-declared check whose (skill, section) pointer does not resolve in the rendered
+# skills refuses sync (and sync --check), naming the check and the headings that exist.
+# covers: R-PROF-046
+cd repo
+snap before
+exits 4 ness sync
+stderr 'local/needs-section'
+stderr 'No such section'
+stderr 'Communicate'
+stderr 'Lifecycle'
+samesnap before
+exits 4 ness sync --check
+stderr 'local/needs-section'
+samesnap before
+
+# Pointing at a heading that exists passes.
+cp ../fixed.toml .ness/profiles/local/profile.toml
+ness sync
+ness sync --check
+
+-- repo/.ness/ness.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"
+profiles = ["local"]
+-- repo/.ness/profiles/local/profile.toml --
+name = "local"
+
+[[checks]]
+id      = "needs-section"
+on      = "open"
+skill   = "ness-entry"
+section = "No such section"
+message = "Do the thing."
+kind    = "checkpoint-since-landing"
+-- fixed.toml --
+name = "local"
+
+[[checks]]
+id      = "needs-section"
+on      = "open"
+skill   = "ness-entry"
+section = "Communicate"
+message = "Do the thing."
+kind    = "checkpoint-since-landing"

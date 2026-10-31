@@ -1,0 +1,12 @@
+# want: path
+name = "local"
+
+[[checks]]
+id = "c1"
+on = "open"
+skill = "ness-entry"
+section = "Communicate"
+message = "fix it"
+kind = "branch-forbids"
+path = "(unclosed"
+pattern = "D[0-9]+"

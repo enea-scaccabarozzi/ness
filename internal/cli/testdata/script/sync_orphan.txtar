@@ -1,0 +1,42 @@
+# Rule 5: a target no longer rendered is deleted if untouched, kept and released if edited.
+# covers: R-SYNC-019, R-SYNC-020, R-PROF-010
+cd repo
+exec ness sync
+grep '"owner": "local"' .ness/lock.json
+cp ../mine.md docs/b.md
+cp ../none.toml .ness/ness.toml
+exec ness sync
+stdout '^delete docs/a.md$'
+stdout '^orphaned docs/b.md'
+! exists docs/a.md
+cmp docs/b.md ../mine.md
+! grep 'docs/' .ness/lock.json
+cp ../later.md docs/b.md
+exec ness sync
+! stdout .
+cmp docs/b.md ../later.md
+
+-- repo/.ness/ness.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"
+profiles = ["local"]
+-- none.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"
+-- repo/.ness/profiles/local/profile.toml --
+name = "local"
+[files]
+"docs/a.md" = { own = "a.md" }
+"docs/b.md" = { own = "b.md" }
+-- repo/.ness/profiles/local/a.md --
+a
+-- repo/.ness/profiles/local/b.md --
+b
+-- mine.md --
+mine
+-- later.md --
+later

@@ -1,0 +1,52 @@
+# Under policy jev with Jev down (a 401 from the fake API), pre-tool judges a call with no kind
+# line against base (specs.md §2: the fallback with no kind is base), so opus/medium (standard)
+# passes; a call with a kind line falls back to the declared rung and is refused above it. The
+# fake network answers api.typesafe.ai from $NESS_TEST_FAKES/jev.
+# covers: R-MOD-067
+cd repo
+exec ness init --gate true --base main --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+cp ../jev.toml .ness/ness.toml
+exec git commit -q -am 'policy jev'
+env TYPESAFE_API_KEY=ts-fake-k3y-7f3a
+mkdir $NESS_TEST_FAKES/jev/v1
+cp ../systemone.401 $NESS_TEST_FAKES/jev/v1/systemone
+store add-launch s-aaaaaaaaaaaa root - tier=standard client=claude
+env NESS_SESSION=s-aaaaaaaaaaaa
+
+# Rejects: refusing a call with no kind because the network is down (ErrNoKind passed through),
+# so the same prompt is refused or allowed depending on Jev.
+stdin ../nokind.json
+exec ness hook pre-tool
+! stdout .
+! stderr .
+
+# Rejects: a 401 that lets the call through instead of the declared rung (search = economy).
+stdin ../above.json
+exits 2 ness hook pre-tool
+stderr 'economy'
+stderr 'jev: 401; kind search'
+! stderr ts-fake-k3y
+
+exec ness stats --json
+stdout '"allowed": 1'
+stdout '"refused": 1'
+
+-- jev.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"
+[models]
+policy = "jev"
+[models.jev]
+key = "env:TYPESAFE_API_KEY"
+endpoint = "https://api.typesafe.ai"
+-- systemone.401 --
+401
+{"detail":{"error_type":"authentication_error","message":"Cannot authenticate with key ts-fake-k3y-7f3a."}}
+-- nokind.json --
+{"tool_name":"Agent","tool_input":{"description":"d","prompt":"find x","subagent_type":"general-purpose","model":"opus","effort":"medium"}}
+-- above.json --
+{"tool_name":"Agent","tool_input":{"description":"d","prompt":"kind: search\nfind x","subagent_type":"general-purpose","model":"opus","effort":"medium"}}

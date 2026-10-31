@@ -1,0 +1,47 @@
+# The operator's close of a root is refused while the root's agent is working (exit 4, nothing
+# touched): its tab stays on close, so a commit made before the worktree goes would be lost. The
+# root closing itself with the operator's words is the agent that would commit, so it is not
+# refused; an idle root is closed as usual.
+# covers: R-SESS-124
+cd repo
+exec ness init --gate true --base main --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+store get $R agent AR
+exec ness open --root --scope s --tier standard --brief ../b.md
+store last-session S
+store get $S agent AS
+store get $S client_session CS
+exec sh -c 'cd .worktrees/r-* && printf "## Lessons\nNone.\n" > docs/sessions/r/report.md && git add -A && git commit -q -m report && NESS_SESSION=$R ness integrate --subject "feat: x"'
+exec sh -c 'cd .worktrees/s-* && printf "## Lessons\nNone.\n" > docs/sessions/s/report.md && git add -A && git commit -q -m report && NESS_SESSION=$S ness integrate --subject "feat: x"'
+# Working: the operator is refused and nothing is touched.
+fake herdr status $AR working
+exits 4 ness close $R
+stderr 'working'
+store session $R closed=false
+exec git branch --list 'session/r-*'
+stdout 'session/r-'
+exec git worktree list
+stdout 'worktrees/r-'
+fake herdr tabs 2
+# Working, but the root closes itself on the operator's words: accepted.
+fake herdr status $AS working
+exec sh -c 'd=$(cd .worktrees/s-* && pwd -P | sed "s/[^A-Za-z0-9]/-/g"); mkdir -p $HOME/.claude/projects/$d; cp ../typed.jsonl $HOME/.claude/projects/$d/$CS.jsonl'
+env NESS_SESSION=$S
+exec ness close $S --authorized 'close it'
+stdout '^closed s-[0-9a-f]{12} \(s\)$'
+store session $S closed=true
+env NESS_SESSION=
+# Idle: the operator's close proceeds.
+fake herdr status $AR idle
+exec ness close $R
+stdout '^closed s-[0-9a-f]{12} \(r\)$'
+store session $R closed=true
+exec git worktree list
+! stdout 'worktrees/r-'
+-- b.md --
+brief
+-- typed.jsonl --
+{"type":"user","message":{"role":"user","content":"looks good, close it and go home"},"promptSource":"typed","origin":{"kind":"human"}}

@@ -1,0 +1,4 @@
+{
+  "title": "Reference",
+  "pages": ["cli", "config", "profile-format", "probe-format", "builtin-profiles", "files", "environment"]
+}

@@ -1,0 +1,52 @@
+name = "local"
+
+[[checks]]
+id      = "autonomy-recorded"
+on      = "open"
+for     = "child"
+skill   = "ness-entry"
+section = "Autonomy"
+message = "Record the autonomy mode."
+kind    = "section-matches"
+file    = "docs/program/roadmap.md"
+heading = "Autonomy"
+require = ['(?i)\b(gate|bands)\b', '\d{4}-\d{2}-\d{2}']
+
+[[checks]]
+id      = "no-decision-ids"
+on      = "integrate"
+skill   = "ness-entry"
+section = "Lifecycle"
+message = "No decision ids in a child's record."
+kind    = "branch-forbids"
+path    = '^{record}/'
+pattern = 'D[0-9]+'
+
+[[checks]]
+id              = "recovery-line"
+on              = "close"
+for             = "root"
+skill           = "ness-entry"
+section         = "Lifecycle"
+message         = "The recovery line must equal the ledger."
+kind            = "match-last"
+file            = "docs/program/roadmap.md"
+pattern         = 'Recovery line: (D\d+)'
+against_file    = "docs/program/decisions.md"
+against_pattern = '^## (D\d+)'
+
+[[checks]]
+id      = "checkpoint"
+on      = "open"
+skill   = "ness-entry"
+section = "Communicate"
+message = "Send the operator a checkpoint first."
+kind    = "checkpoint-since-landing"
+
+[[checks]]
+id      = "script"
+on      = "integrate"
+skill   = "ness-entry"
+section = "Tests"
+run     = "sh .ness/checks/x.sh"
+timeout = "45s"

@@ -1,0 +1,47 @@
+# launch.max_children caps the children open across the project; a root is never counted and
+# closing a child frees its place. Unset, the cap is half the cores (GOMAXPROCS=4 here: 2). The
+# refusal lists the children holding the slots; a child parked until a future time holds none, one
+# parked without a time still does.
+# covers: R-SESS-152
+env GOMAXPROCS=4
+cd repo
+exec ness init --gate true --base main --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+env NESS_SESSION=$R
+exec ness open --scope a --tier standard --brief ../b.md
+store last-session A
+exec ness open --scope b --tier standard --brief ../b.md
+store last-session B
+exits 4 ness open --scope c --tier standard --brief ../b.md
+stderr '2 children are already open in this project \(launch.max_children = 2\); wait for one to land and close it'
+stderr $A' a \(manager '$R'\) idle (-|[0-9]+[mhd])'
+stderr $B' b \(manager '$R'\) idle (-|[0-9]+[mhd])'
+stderr 'skill ness-[a-z-]+, section [A-Z]'
+! stderr 'raise launch'
+store sessions 3
+env NESS_SESSION=
+exec ness open --root --scope r2 --tier standard --brief ../b.md
+env NESS_SESSION=$R
+store close-session $A
+exec ness open --scope c --tier standard --brief ../b.md
+store last-session C
+env NESS_SESSION=$B
+exec ness inbox --boundary 'release window' --until 2099-01-01
+env NESS_SESSION=$C
+exec ness inbox --boundary 'state written'
+env NESS_SESSION=$R
+exec ness open --scope e --tier standard --brief ../b.md
+store last-session E
+exits 4 ness open --scope f --tier standard --brief ../b.md
+stderr $C' c \(manager '$R'\) idle '
+stderr $E' e \(manager '$R'\) idle '
+! stderr $B
+# Set explicitly, it wins over the cores.
+exec sh -c 'printf "\n[launch]\nmax_children = 5\n" >> .ness/ness.toml'
+exec ness open --scope d --tier standard --brief ../b.md
+
+-- b.md --
+b

@@ -1,0 +1,72 @@
+# ness stats --by rung groups cost by rung: the session's own turns at its tier, each subagent's at
+# the rung its meta model/effort finds on the ladder; a meta with neither (Claude Code's real
+# shape for a named agent or a fork) at the named agent's rendered rung, else the session's tier;
+# off-ladder otherwise; --by role adds a subagent row; no turn or tool byte is counted twice
+# (the total stays 950 cents and 60 tool bytes).
+# covers: R-STAT-020, R-STAT-021
+cd repo
+exec ness init --gate true --base main --yes
+store add-launch s-aaaaaaaaaaaa root - tier=standard client=claude client_session=aaaaaaaa-0000-4000-8000-000000000001
+exec sh -c 'd=$HOME/.claude/projects/$(pwd -P | sed "s/[^A-Za-z0-9]/-/g"); s=$d/aaaaaaaa-0000-4000-8000-000000000001; mkdir -p $s/subagents; cp ../s1.jsonl $s.jsonl; cp ../agent-* $s/subagents/'
+
+# Rejects: subagent cost folded into the session's rung, a subagent grouped by its agent type,
+# a model not on the ladder dropped or forced onto a rung, a total that counts subagents twice,
+# a defaults-only named agent (d4, ness-sweep) put off-ladder instead of economy, and a fork (e5)
+# put off-ladder instead of the session's tier standard.
+exec ness stats --by rung --json
+stdout '"by": "rung"'
+stdout -count=1 '"key": "standard"'
+stdout -count=1 '"key": "economy"'
+stdout -count=1 '"key": "deep"'
+stdout -count=1 '"key": "off-ladder"'
+stdout -count=4 '"key": "(standard|economy|deep|off-ladder)"'
+stdout '(?s)"key": "standard".*?"cost_cents": 500,'
+stdout '(?s)"key": "economy".*?"cost_cents": 300,'
+stdout '(?s)"key": "deep".*?"cost_cents": 100,'
+stdout '(?s)"key": "off-ladder".*?"cost_cents": 50,'
+stdout '(?s)"key": "total".*?"cost_cents": 950,'
+# Rejects: subagent tool bytes added into the session's own row as well (rows must sum to 60).
+stdout '(?s)"key": "standard".*?"tool_bytes": 10,'
+stdout '(?s)"key": "economy".*?"tool_bytes": 50,'
+stdout '(?s)"key": "total".*?"tool_bytes": 60,'
+
+# Rejects: subagent turns or tool bytes charged to the root's role.
+exec ness stats --by role --json
+stdout '(?s)"key": "root".*?"cost_cents": 400,.*?"tool_bytes": 10,'
+stdout '(?s)"key": "subagent".*?"cost_cents": 550,.*?"tool_bytes": 50,'
+stdout '(?s)"key": "total".*?"cost_cents": 950,.*?"tool_bytes": 60,'
+
+# Rejects: a session total that changes with the grouping (subagents dropped by --by session).
+exec ness stats --json
+stdout '(?s)"key": "total".*?"cost_cents": 950,'
+
+-- s1.jsonl --
+{"type":"user","timestamp":"2026-10-09T10:00:00.000Z","message":{"role":"user","content":"do it"}}
+{"type":"assistant","timestamp":"2026-10-09T10:00:04.000Z","message":{"model":"claude-opus-5-5","usage":{"input_tokens":1000000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0},"content":[{"type":"text","text":"ok"}],"id":"msg_1"}}
+{"type":"user","timestamp":"2026-10-09T10:00:05.000Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"0123456789"}]}}
+-- agent-a1.jsonl --
+{"parentUuid":null,"isSidechain":true,"agentId":"a1","type":"user","timestamp":"2026-10-09T10:01:00.000Z","message":{"role":"user","content":"kind: search\nfind x"}}
+{"isSidechain":true,"agentId":"a1","type":"assistant","timestamp":"2026-10-09T10:01:04.000Z","message":{"model":"claude-sonnet-5-5","usage":{"input_tokens":1000000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0},"content":[{"type":"text","text":"found"}],"id":"msg_s1"}}
+-- agent-a1.meta.json --
+{"agentType":"ness-sweep","description":"find x","toolUseId":"toolu_a1","spawnDepth":1,"model":"sonnet","effort":"medium","finished":true}
+-- agent-b2.jsonl --
+{"parentUuid":null,"isSidechain":true,"agentId":"b2","type":"user","timestamp":"2026-10-09T10:02:00.000Z","message":{"role":"user","content":"kind: verify\ncheck y"}}
+{"isSidechain":true,"agentId":"b2","type":"assistant","timestamp":"2026-10-09T10:02:04.000Z","message":{"model":"claude-opus-5-5","usage":{"input_tokens":25000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":45000},"content":[{"type":"text","text":"holds"}],"id":"msg_b1"}}
+-- agent-b2.meta.json --
+{"agentType":"ness-verify","description":"verify y","toolUseId":"toolu_b2","spawnDepth":1,"model":"opus","effort":"high","finished":true}
+-- agent-c3.jsonl --
+{"parentUuid":null,"isSidechain":true,"agentId":"c3","type":"user","timestamp":"2026-10-09T10:03:00.000Z","message":{"role":"user","content":"kind: run\nrun z"}}
+{"isSidechain":true,"agentId":"c3","type":"assistant","timestamp":"2026-10-09T10:03:04.000Z","message":{"model":"claude-haiku-4-5","usage":{"input_tokens":100000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":80000},"content":[{"type":"text","text":"ran"}],"id":"msg_c1"}}
+-- agent-c3.meta.json --
+{"agentType":"general-purpose","description":"odd one","toolUseId":"toolu_c3","spawnDepth":1,"model":"haiku","effort":"low","finished":true}
+-- agent-d4.jsonl --
+{"parentUuid":null,"isSidechain":true,"agentId":"d4","type":"user","timestamp":"2026-10-09T10:04:00.000Z","message":{"role":"user","content":"find w"}}
+{"isSidechain":true,"agentId":"d4","type":"assistant","timestamp":"2026-10-09T10:04:04.000Z","message":{"model":"claude-sonnet-5-5","usage":{"input_tokens":500000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0},"content":[{"type":"text","text":"found"}],"id":"msg_d1"}}
+{"isSidechain":true,"agentId":"d4","type":"user","timestamp":"2026-10-09T10:04:05.000Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t2","content":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}]}}
+-- agent-d4.meta.json --
+{"agentType":"ness-sweep","launchedWithDefaults":true,"description":"find w","toolUseId":"toolu_d4","spawnDepth":1}
+-- agent-e5.jsonl --
+{"parentUuid":null,"isSidechain":true,"agentId":"e5","type":"user","timestamp":"2026-10-09T10:05:00.000Z","message":{"role":"user","content":"carry on"}}
+{"isSidechain":true,"agentId":"e5","type":"assistant","timestamp":"2026-10-09T10:05:04.000Z","message":{"model":"claude-opus-5-5","usage":{"input_tokens":250000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0},"content":[{"type":"text","text":"done"}],"id":"msg_e1"}}
+-- agent-e5.meta.json --
+{"agentType":"fork","description":"carry on","toolUseId":"toolu_e5","spawnDepth":1}

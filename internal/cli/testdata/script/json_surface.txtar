@@ -1,0 +1,39 @@
+# Every --json command writes exactly one JSON object with "schema": 1 to stdout and nothing
+# else, whatever its exit code: status, inbox, doctor, stats, probe run, sync --dry-run and pick.
+# covers: R-CFG-032, R-CFG-037
+cd repo
+exec ness init --gate true --base main --yes
+exec sh -c 'printf "features = [\"probes\"]\n" >> .ness/ness.toml'
+exec ness sync
+store add-session s-aaaaaaaaaaaa root
+cp ../green.md ../red.md .
+env NESS_SESSION=s-aaaaaaaaaaaa
+exec ness status --json
+onejson
+exec ness inbox --json
+onejson
+exits 1 ness doctor --json
+onejson
+exec ness stats --json
+onejson
+exec ness probe run green.md --json
+onejson
+exits 1 ness probe run red.md --json
+onejson
+exec ness sync --dry-run --json
+onejson
+exec ness pick --kind search --json
+onejson
+exec ness pick --json
+onejson
+
+-- green.md --
+---
+every: 1m
+floor: echo n=1
+---
+-- red.md --
+---
+every: 1m
+floor: exit 1
+---

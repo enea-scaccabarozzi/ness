@@ -1,0 +1,10 @@
+name    = "example-release"
+summary = "One complete release chain as profile text: integrate, a post-push CI probe, notify (design §8, D12)"
+
+[features]
+enable = ["probes", "notify"]
+
+[files]
+".agents/skills/ness-example-release/SKILL.md" = { own = "skills/ness-example-release/SKILL.md" }
+"probes/ci-after-push.md"                      = { seed = "ci-after-push.md" }
+"docs/release-notes/TEMPLATE.md"               = { seed = "release-notes-template.md" }

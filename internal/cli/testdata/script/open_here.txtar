@@ -1,0 +1,46 @@
+# open --root --here registers the running conversation: no tab, bound to the current pane and
+# transcript, ready at once, with its own worktree and branch from the base like a launched root,
+# while the primary checkout stays untouched (its uncommitted edit, its branch); needs the pane and
+# session variables of a herdr-hosted Claude Code session.
+# covers: R-SESS-038, R-SESS-039, R-SESS-041, R-SESS-115, R-HOOK-008
+cd repo
+exec ness init --gate true --base main --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+exec sh -c 'echo wip > wip.txt'
+exits 4 ness open --root --here --scope prog --tier standard --brief ../b.md
+stderr 'HERDR_PANE_ID'
+env HERDR_PANE_ID=w1:p7
+env HERDR_TAB_ID=w1:t7
+env CLAUDE_CODE_SESSION_ID=0bad0bad-0000-4000-8000-000000000000
+exec ness open --root --here --scope prog --tier standard --brief ../b.md
+stdout '^adopted s-[0-9a-f]{12} scope prog branch session/prog-[0-9a-f]{12} worktree .*/repo/\.worktrees/prog-[0-9a-f]{12} record docs/sessions/prog$'
+stdout '^work in that worktree from now on'
+store last-session R
+store session $R adopted=true phase=ready pane=w1:p7 tab=w1:t7 client_session=0bad0bad-0000-4000-8000-000000000000 base=main
+! store session $R ready=false
+fake herdr tabs 0
+exec sh -c 'ls .worktrees/prog-*/docs/sessions/prog/brief.md'
+! exists docs/sessions/prog/brief.md
+exec git symbolic-ref --short HEAD
+stdout '^main$'
+exec git status --porcelain
+stdout '^\?\? wip.txt$'
+# After compaction the adopted root keeps its identity and is not told to stay out (R-HOOK-008).
+env NESS_SESSION=$R
+stdin ../compact.json
+exec ness hook session-start
+stdout '^ness session s-[0-9a-f]{12} scope prog manager operator size full phase ready$'
+stdout 'cheat sheet'
+! stdout 'do not attach'
+env NESS_SESSION=
+# A root's child opened from the adopted root starts from its branch under .worktrees.
+env NESS_SESSION=$R
+exec ness open --scope c --tier standard --brief ../b.md
+exec git worktree list
+stdout 'worktrees/c-'
+
+-- b.md --
+b
+-- compact.json --
+{"hook_event_name":"SessionStart","source":"compact","session_id":"c0ffee"}

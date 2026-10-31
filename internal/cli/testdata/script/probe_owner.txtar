@@ -1,0 +1,103 @@
+# Closing an owner moves its probes to the manager and the next wake lands there; closing a
+# root pauses them, shown red in status and listed by doctor; the worker never runs a paused
+# probe, a new session does not resume it, and probe start from a live session does, as owner.
+# covers: R-PRB-070, R-PRB-071, R-SESS-070, R-SESS-083, R-DOC-015, R-WRK-061, R-WRK-060
+cd repo
+exec ness init --gate true --base main --yes
+exec sh -c 'cat ../channel.toml >> .ness/ness.toml'
+exec git add -A
+exec git commit -q -m 'ness init'
+env NESS_TEST_NOW=2026-10-09T10:00:00Z
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+exec sh -c 'cd .worktrees/r-* && NESS_SESSION=$R ness open --scope q --tier standard --brief ../../../b.md'
+store last-session Q
+exec sh -c 'cd .worktrees/q-* && mkdir -p probes && cp ../../../a.md probes/ && git add -A && git commit -q -m probe'
+env NESS_SESSION=$Q
+exec sh -c 'cd .worktrees/q-* && ness probe start probes/a.md'
+# The worker runs it: a wake in q's inbox; no tab, no agent started.
+exec ness worker run --once
+store items $Q 1
+store last $Q WQ
+store probe-id probes/a.md $Q PQ
+store item $WQ probe=$PQ
+fake herdr tabs 2
+store probe probes/a.md $Q runs=1 last_state=RED
+# The verdict, answered from the owner's worktree, reads the file there (issue #2).
+exec sh -c 'cd .worktrees/q-* && ness probe verdict $WQ --state red --note x'
+! stderr 'cannot read the probe file'
+# q closes: the probe moves to r; the manager's worktree has the file after the fold.
+exec sh -c 'cd .worktrees/q-* && printf "## Lessons\nNone.\n" > docs/sessions/r/q/report.md && git add -A && git commit -q -m report && ness integrate --subject "feat: x"'
+env NESS_SESSION=$R
+exec ness close $Q --note 'quick task done'
+stdout 'probes: 1 moved to s-'
+store probe probes/a.md $R state=active owner=$R
+exec ness status
+stdout '^probe\tprobes/a\.md\ts-[0-9a-f]{12}\tactive verdict red\tRED'
+env NESS_TEST_NOW=2026-10-09T10:31:00Z
+exec ness worker run --once
+store items $R 1
+store last $R WR
+store probe-id probes/a.md $R PR
+store item $WR probe=$PR
+# The root closes: the probe pauses, red in status, listed by doctor, never run.
+env NESS_SESSION=
+exec sh -c 'cd .worktrees/r-* && printf "## Lessons\nNone.\n" > docs/sessions/r/report.md && git add -A && git commit -q -m report && NESS_SESSION=$R ness integrate --subject "feat: x"'
+exec ness close $R --note 'root done'
+stdout 'probes: 1 paused \(no live owner\)'
+exec ness status
+stdout '^probe\tprobes/a\.md\ts-[0-9a-f]{12}\tpaused'
+exec ness status --json
+stdout '"state": "paused"'
+exits 1 ness doctor
+stdout '^fail\tprobes\tprobes/a\.md \(owner s-[0-9a-f]{12} closed\)\tfix: ness probe start probes/a\.md'
+env NESS_TEST_NOW=2026-10-09T11:31:00Z
+exec ness worker run --once
+store probe probes/a.md $R state=paused runs=2
+store items $R 0
+fake herdr tabs 1
+# A new session does not resume it; probe start from it does, as owner.
+exec ness open --root --scope r2 --tier standard --brief ../b.md
+store last-session R2
+exec ness worker run --once
+store probe probes/a.md $R state=paused
+env NESS_SESSION=$R2
+exec sh -c 'cd .worktrees/r2-* && ness probe start probes/a.md'
+store probe probes/a.md $R2 state=active owner=$R2
+store probes 1
+exec sh -c 'ness doctor || true'
+stdout '^ok\tprobes\t1 active'
+# A flapping floor with a command channel: the same alert is posted again each time it recurs.
+env NESS_TEST_NOW=2026-10-09T12:00:00Z
+exec sh -c 'cd .worktrees/r2-* && cp ../../../flap.md probes/ && ness probe start probes/flap.md'
+exec ness worker run --once
+env NESS_TEST_NOW=2026-10-09T12:01:00Z
+exec ness worker run --once
+env NESS_TEST_NOW=2026-10-09T12:02:00Z
+exec ness worker run --once
+env NESS_TEST_NOW=2026-10-09T12:03:00Z
+exec ness worker run --once
+exec sh -c 'grep -c "RED → GREEN" $WORK/posted'
+stdout '^2$'
+
+-- channel.toml --
+features = ["probes", "notify"]
+[notify.channels.log]
+kind = "command"
+command = 'cat >> $WORK/posted'
+-- flap.md --
+---
+every: 1m
+floor: n=$(cat $WORK/n 2>/dev/null || echo 0); n=$((n+1)); echo $n > $WORK/n; echo flap; [ $((n % 2)) = 0 ]
+wake: never
+notify: auto
+channel: log
+---
+-- b.md --
+b
+-- a.md --
+---
+every: 30m
+floor: exit 1
+---
+scope a

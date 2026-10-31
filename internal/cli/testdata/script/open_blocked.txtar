@@ -1,0 +1,40 @@
+# A client blocked on a trust or approval dialog gets no prompt: the launch stalls (exit 4), nothing
+# is typed into the dialog, and ness open --resume submits the prompt once the agent is idle,
+# exactly once.
+# covers: R-SESS-025, R-SESS-026, R-SESS-033
+cd repo
+exec ness init --gate true --base main --yes
+cp ../ness.toml .ness/ness.toml
+exec git add -A
+exec git commit -q -m 'ness init'
+fake herdr start-status blocked
+exits 4 ness open --root --scope prog --tier standard --brief ../brief.md
+stderr 'stalled launch'
+stderr 'ness open --resume s-[0-9a-f]{12}'
+fake herdr agents '^p-prog$'
+fake herdr prompted 0
+fake herdr typed 0
+store last-session R
+# The operator accepts the dialog in the tab; the agent is idle.
+fake herdr status p-prog idle
+exec ness open --resume $R
+stdout '^resumed s-[0-9a-f]{12} run 1$'
+store session $R phase=ready
+fake herdr prompted 1
+fake herdr prompt '^You are ness session s-[0-9a-f]{12} \(prog\)\. Read rec/prog/brief\.md, then load ness-entry\.$'
+fake herdr typed 0
+fake herdr tabs 1
+# A running session is not resumed again, and nothing is submitted twice.
+exits 4 ness open --resume $R
+fake herdr prompted 1
+
+-- ness.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"
+sessions = "rec"
+[launch]
+ready_timeout = "300ms"
+-- brief.md --
+Do the thing.

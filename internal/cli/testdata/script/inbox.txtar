@@ -1,0 +1,120 @@
+# ness inbox: one line per open item (id, from, intent, age, 80-rune excerpt), nothing on an
+# empty inbox, --show prints exact bytes and nothing else, listing marks items pulled, an fyi
+# leaves the list once shown, --json lists the same items, the operator's inbox outside a session
+# lists operator items, a --show of someone else's item is refused and leaves it unshown (Review
+# Focus 5), and an unknown NESS_SESSION is refused (Review Focus 4).
+# covers: R-MSG-023, R-MSG-011, R-MSG-012, R-MSG-030, R-MSG-032, R-MSG-033, R-MSG-035, R-MSG-036, R-MSG-041, R-MSG-045, R-MSG-047, R-MSG-048, R-CFG-053
+cd repo
+exec ness init --gate true --base main --yes
+store add-session s-aaaaaaaaaaaa root
+store add-session s-bbbbbbbbbbbb child-b s-aaaaaaaaaaaa
+env NESS_SESSION=s-aaaaaaaaaaaa
+exec ness inbox
+! stdout .
+! stderr .
+exec ness inbox --json
+cmp stdout ../empty.json
+# Three items sent at 10:00; listed at 13:10 they are 3h old. A 10 KB body is cut at 80 runes.
+exec sh -c 'head -c 10240 /dev/zero | tr "\0" x > ../big.txt'
+env NESS_TEST_NOW=2026-10-08T10:00:00Z
+env NESS_SESSION=s-bbbbbbbbbbbb
+exec ness send --to manager --body @../big.txt
+exec ness send --to manager --body @../multiline.txt --intent decision
+store last s-aaaaaaaaaaaa DEC
+exec ness send --to manager --body @../fyi.txt --intent fyi
+store last s-aaaaaaaaaaaa FYI
+env NESS_SESSION=s-aaaaaaaaaaaa
+store pulled s-aaaaaaaaaaaa 0
+env NESS_TEST_NOW=2026-10-08T13:10:00Z
+exec ness inbox
+stdout -count=3 '^m-[a-z2-7]{8}\t'
+stdout '^m-[a-z2-7]{8}\ts-bbbbbbbbbbbb\trequest\t3h\tx{80}$'
+! stdout 'x{81}'
+stdout '^m-[a-z2-7]{8}\ts-bbbbbbbbbbbb\tdecision\t3h\tfirst line second line  third $'
+stdout '^m-[a-z2-7]{8}\ts-bbbbbbbbbbbb\tfyi\t3h\tfyi body with two lines $'
+store pulled s-aaaaaaaaaaaa 3
+# Listing again shows the same items (pulled, still open).
+exec ness inbox
+stdout -count=3 '^m-[a-z2-7]{8}\t'
+# --json lists the same items with every frozen field, and never the body.
+exec ness inbox --json
+stdout -count=3 '"id": "m-[a-z2-7]{8}"'
+stdout -count=3 '"age": "3h"'
+stdout -count=3 '"created_at": "2026-10-08T10:00:00Z"'
+stdout -count=3 '"deferred": false'
+stdout -count=3 '"urgent": false'
+stdout -count=3 '"from": "s-bbbbbbbbbbbb"'
+stdout '"intent": "request"'
+stdout '"intent": "decision"'
+stdout '"intent": "fyi"'
+stdout '"excerpt": "fyi body with two lines "'
+stdout '"schema": 1'
+! stdout 'x{81}'
+exec sh -c 'ness inbox | cut -f1 | sort > ../text.ids; ness inbox --json | grep "\"id\"" | cut -d\" -f4 | sort > ../json.ids'
+cmp ../text.ids ../json.ids
+# --show prints the exact bytes of one body and nothing else; the fyi then leaves the list.
+exec ness inbox --show $FYI
+cmp stdout ../fyi.txt
+store item $FYI shown=2026-10-08T13:10:00Z
+exec ness inbox --show $DEC
+cmp stdout ../multiline.txt
+exec ness inbox
+stdout -count=2 '^m-[a-z2-7]{8}\t'
+! stdout '\tfyi\t'
+# Someone else's item cannot be shown and stays unshown; an unknown id is refused.
+env NESS_SESSION=s-bbbbbbbbbbbb
+exec ness send --to manager --body 'not yet read'
+store last s-aaaaaaaaaaaa UNREAD
+env NESS_SESSION=s-bbbbbbbbbbbb
+exits 4 ness inbox --show $UNREAD
+stderr 'addressed to s-aaaaaaaaaaaa'
+store item $UNREAD shown=false
+exits 4 ness inbox --show m-nope
+stderr 'no item m-nope'
+# Empty values for --show and --boundary are usage errors that write nothing.
+env NESS_SESSION=s-aaaaaaaaaaaa
+exits 2 ness inbox --show ''
+! stdout .
+exits 2 ness inbox --boundary ''
+! stdout .
+store session s-aaaaaaaaaaaa boundary=
+env NESS_SESSION=s-bbbbbbbbbbbb
+# Days: an item from two days ago.
+env NESS_TEST_NOW=2026-10-06T10:00:00Z
+exec ness send --to manager --body old
+env NESS_SESSION=s-aaaaaaaaaaaa
+env NESS_TEST_NOW=2026-10-08T12:00:00Z
+exec ness inbox
+stdout '\trequest\t2d\told$'
+# The operator's inbox (no NESS_SESSION) lists operator items; --boundary has no session there.
+exec ness send --to operator --body 'for the operator'
+store last operator OP
+# A child may not show an operator item; it stays unshown (R-MSG-023).
+env NESS_SESSION=s-bbbbbbbbbbbb
+exits 4 ness inbox --show $OP
+stderr 'addressed to operator, not to you'
+store item $OP shown=false
+env NESS_SESSION=
+exec ness inbox
+stdout '^m-[a-z2-7]{8}\ts-aaaaaaaaaaaa\trequest\t0m\tfor the operator$'
+exits 4 ness inbox --boundary note
+# An unknown NESS_SESSION is a refusal that says how to fix it.
+env NESS_SESSION=s-ffffffffffff
+exits 4 ness inbox
+stderr 'not a session of this project'
+# Outside a ness project, inbox refuses (R-CFG-053).
+cd $WORK
+exits 4 ness inbox
+
+-- empty.json --
+{
+  "items": [],
+  "schema": 1
+}
+-- multiline.txt --
+first line
+second line
+	third
+-- fyi.txt --
+fyi body
+with two lines

@@ -1,0 +1,105 @@
+# The renderer: --ui and NESS_UI pick it and an unknown value is a usage error (a hook fails
+# open); rich output on a pipe has no color unless CLICOLOR_FORCE, and NO_COLOR wins; rich help
+# names every command; a rich error starts with a cross and a usage error names the command's
+# help; --watch is refused off a terminal and under ACCESSIBLE; what agents read is the same
+# under either renderer.
+# covers: R-UI-001, R-UI-002, R-UI-003, R-UI-010, R-UI-020, R-UI-021, R-UI-028
+cd repo
+exec ness init --gate true --base main --yes
+exec git add -A
+exec git commit -q -m init
+# Unknown values.
+exits 2 ness --ui fancy status
+stderr 'auto, rich, plain'
+env NESS_UI=fancy
+exits 2 ness status
+stderr 'auto, rich, plain'
+exec ness hook pre-tool
+env NESS_UI=
+# Color follows the profile: none on a pipe, forced by CLICOLOR_FORCE, NO_COLOR wins.
+exec ness --ui rich status
+! stdout '\x1b\['
+stdout 'worker not running'
+env CLICOLOR_FORCE=1
+exec ness --ui rich status
+stdout '\x1b\['
+env NO_COLOR=1
+exec ness --ui rich status
+! stdout '\x1b\[([0-9;]*;)?(3[0-8]|4[0-8]|9[0-7]|10[0-7])[;m]'
+env CLICOLOR_FORCE=
+env NO_COLOR=
+# The flag beats the variable.
+env NESS_UI=rich
+exec ness --ui plain status
+stdout '^worker: not running$'
+# Help names every command and the flag.
+exec ness --help
+stdout 'COMMANDS'
+stdout '^ +close ID'
+stdout '^ +contract '
+stdout '^ +doctor '
+stdout '^ +hook EVENT'
+stdout '^ +inbox '
+stdout '^ +init '
+stdout '^ +integrate '
+stdout '^ +open '
+stdout '^ +post '
+stdout '^ +probe '
+stdout '^ +reply ITEM'
+stdout '^ +send '
+stdout '^ +stats '
+stdout '^ +status '
+stdout '^ +sync '
+stdout '^ +worker '
+stdout '--ui'
+! stdout '^\s+help '
+# Errors.
+exits 2 ness send --bogus
+stderr '^✗ unknown flag: --bogus'
+stderr 'try: ness send --help'
+! stderr 'ness:'
+exits 4 ness status --watch
+stderr '✗ --watch needs'
+env ACCESSIBLE=1
+exits 4 ness status --watch
+env ACCESSIBLE=
+env NESS_UI=
+exits 4 ness status --watch
+stderr '^ness: --watch needs'
+# What agents read: the same bytes under either renderer.
+store add-session s-aaaaaaaaaaaa root
+env NESS_SESSION=s-aaaaaaaaaaaa
+exec ness send --to operator --body 'hello'
+env NESS_SESSION=
+exec ness inbox --json
+cp stdout ../plain-inbox.json
+exits 1 ness doctor --json
+cp stdout ../plain-doctor.json
+exec ness hook session-start
+cp stdout ../plain-hook.txt
+env NESS_UI=rich
+exec ness inbox --json
+cmp stdout ../plain-inbox.json
+exits 1 ness doctor --json
+cmp stdout ../plain-doctor.json
+exec ness hook session-start
+cmp stdout ../plain-hook.txt
+# An agent inherits the operator's NESS_UI: its identity keeps it plain, and a hook stays plain
+# even under --ui rich, its stderr (the block reason the model reads) included.
+env NESS_SESSION=s-aaaaaaaaaaaa
+exec ness send --to operator --body 'again'
+stdout '^sent m-'
+env NESS_UI=
+stdin ../monitor.json
+exits 2 ness hook pre-tool
+cp stderr ../plain-block.txt
+env NESS_UI=rich
+stdin ../monitor.json
+exits 2 ness --ui rich hook pre-tool
+cmp stderr ../plain-block.txt
+env NESS_UI=fancy
+stdin ../monitor.json
+exits 2 ness hook pre-tool
+cmp stderr ../plain-block.txt
+-- monitor.json --
+{"tool_name":"Monitor","tool_input":{"command":"ness inbox","timeout_sec":300}}

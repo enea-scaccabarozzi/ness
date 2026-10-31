@@ -1,0 +1,27 @@
+# A session that integrated (squash, the default) and then reverted part of its own work holds a
+# commit its base lacks, though merging the branch over the fork point changes nothing in the base.
+# A recorded integration keeps the integrator's answer: the destructive close is refused and the
+# branch with the revert survives.
+# covers: R-SESS-167, R-SESS-064
+cd repo
+exec ness init --gate true --base main --yes
+exec sh -c 'echo base > f.txt'
+exec git add -A
+exec git commit -q -m 'ness init'
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+store get $R branch RB
+exec sh -c 'cd .worktrees/r-* && printf "## Lessons\nNone.\n" > docs/sessions/r/report.md && echo work > f.txt && git add -A && git commit -q -m work && NESS_SESSION=$R ness integrate --subject "feat: x"'
+exec sh -c 'cd .worktrees/r-* && echo base > f.txt && git commit -q -am revert'
+exec git show main:f.txt
+stdout '^work$'
+exits 4 ness close $R
+stderr 'not integrated into main'
+store session $R closed=false
+exec git branch --list 'session/r-*'
+stdout 'session/r-'
+exec git show $RB:f.txt
+stdout '^base$'
+
+-- b.md --
+b

@@ -1,0 +1,11 @@
+{"type":"user","timestamp":"2026-10-13T16:14:00Z","message":{"role":"user","content":"hi"}}
+{"type":"assistant","timestamp":"2026-10-13T16:14:56Z","message":{"role":"assistant","usage":{"input_tokens":10,"cache_read_input_tokens":1000,"cache_creation_input_tokens":0}}}
+{"type":"system","subtype":"away_summary","timestamp":"2026-10-13T16:57:15Z"}
+{"type":"system","subtype":"turn_duration","timestamp":"2026-10-13T16:58:00Z"}
+{"type":"attachment","timestamp":"2026-10-13T17:00:00Z","attachment":{"type":"hook_success"}}
+{"type":"queue-operation","timestamp":"2026-10-13T17:01:00Z"}
+{"type":"user","timestamp":"2026-10-13T17:02:00Z","isMeta":true,"message":{"role":"user","content":"meta"}}
+{"type":"user","timestamp":"2026-10-13T17:03:00Z","isCompactSummary":true,"message":{"role":"user","content":"summary"}}
+{"type":"last-prompt"}
+{"type":"custom-title"}
+not json

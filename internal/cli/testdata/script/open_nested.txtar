@@ -1,0 +1,24 @@
+# Opening from inside a worktree (a manager's cwd) puts the new worktree under the primary
+# checkout and uses the shared store; the record dir nests three deep for a grandchild.
+# covers: R-SESS-020, R-SESS-022
+cd repo
+exec ness init --gate true --base main --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+cd .worktrees
+exec sh -c 'cd r-* && NESS_SESSION=$R ness open --scope c --tier standard --brief ../../../b.md'
+store last-session C
+exec sh -c 'cd c-* && NESS_SESSION=$C ness open --scope g --tier economy --brief ../../../b.md'
+store sessions 3
+exec sh -c 'ls -d r-* c-* g-* | wc -l'
+stdout '^3$'
+exec sh -c 'test -f g-*/docs/sessions/r/c/g/brief.md'
+exec sh -c 'test ! -e c-*/.worktrees'
+cd ..
+exec git worktree list
+stdout -count=3 'worktrees/'
+
+-- b.md --
+b

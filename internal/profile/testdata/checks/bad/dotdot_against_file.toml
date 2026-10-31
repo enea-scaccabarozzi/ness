@@ -1,0 +1,14 @@
+# want: against_file
+name = "local"
+
+[[checks]]
+id = "c1"
+on = "open"
+skill = "ness-entry"
+section = "Communicate"
+message = "fix it"
+kind = "match-last"
+file = "a.md"
+pattern = "(x)"
+against_file = "../b.md"
+against_pattern = "(y)"

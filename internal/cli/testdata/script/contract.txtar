@@ -1,0 +1,163 @@
+# freeze records each file's blob sha in the calling session's contract.lock, refuses a missing
+# path before writing anything, and needs a session; amend opens exactly one frozen file, needs
+# --reason, appends the decision line and refuses an unfrozen file; freeze again closes the
+# amendment; check verifies every lock and the project-wide paths, exits 1 naming each
+# differing file and 0 after a revert, writes nothing, and fails closed on a malformed lock.
+# covers: R-CTR-001, R-CTR-002, R-CTR-003, R-CTR-004, R-CTR-005, R-CTR-006, R-CTR-007, R-CTR-008
+cd repo
+exec ness init --gate true --base main --yes
+exec sh -c 'printf "features = [\"contracts\"]\n[contracts]\nfrozen = [\"api.json\"]\n" >> .ness/ness.toml'
+exec sh -c 'printf "{}\n" > api.json; printf "Feature: a\n" > a.txt; printf "Feature: b\n" > b.txt'
+exec git add -A
+exec git commit -q -m 'ness init'
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+exec sh -c 'cd .worktrees/r-* && NESS_SESSION=$R ness open --scope c --tier standard --brief ../../../b.md'
+store last-session C
+# The operator approves R's amendment; R, C's manager, approves C's.
+exec ness send --to $R --body 'approve a.txt'
+store last $R IR
+exec sh -c 'cd .worktrees/r-* && NESS_SESSION=$R ness send --to $C --body "approve c.txt"'
+store last $C IC
+# The operator has no lock.
+exits 4 ness contract freeze a.txt
+stderr 'needs a session'
+# A missing path refuses before anything is written.
+env NESS_SESSION=$R
+snap before .worktrees
+exits 4 sh -c 'cd .worktrees/r-* && ness contract freeze a.txt nope.feature'
+stderr 'nope\.feature'
+samesnap before .worktrees
+# freeze records the blob sha in the session's record directory.
+exec sh -c 'cd .worktrees/r-* && ness contract freeze a.txt b.txt'
+stdout '^frozen a\.txt b\.txt in docs/sessions/r/contract\.lock$'
+exec sh -c 'cd .worktrees/r-* && git hash-object a.txt'
+cp stdout $WORK/sha-a
+exec sh -c 'cd .worktrees/r-* && grep "^$(cat $WORK/sha-a) a.txt$" docs/sessions/r/contract.lock'
+exec sh -c 'cd .worktrees/r-* && git add -A && git commit -q -m freeze'
+# check: clean is 0 and writes nothing; an edit (sed -i, as Bash would) is named, exit 1.
+snap clean .worktrees
+exec sh -c 'cd .worktrees/r-* && ness contract check'
+stdout '^ok\t3 frozen files$'
+samesnap clean .worktrees
+exec sh -c 'cd .worktrees/r-* && sed -i "s/a/A/" a.txt'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stdout '^differs\ta\.txt\tdocs/sessions/r/contract\.lock$'
+exec sh -c 'cd .worktrees/r-* && git checkout -- a.txt && ness contract check'
+# A project-wide path differs from base until committed on base.
+exec sh -c 'cd .worktrees/r-* && printf "{\"v\":2}\n" > api.json'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stdout '^differs\tapi\.json\t\.ness/ness\.toml$'
+exec sh -c 'cd .worktrees/r-* && git checkout -- api.json'
+# freeze of a path already frozen (and not amended) is refused: only amend reopens it.
+exec sh -c 'cd .worktrees/r-* && sed -i "s/a/A/" a.txt'
+exits 4 sh -c 'cd .worktrees/r-* && ness contract freeze a.txt'
+stderr 'a\.txt is already frozen; run ness contract amend'
+exits 4 sh -c 'cd .worktrees/r-* && ness contract freeze api.json'
+stderr 'api\.json is frozen project-wide'
+exec sh -c 'cd .worktrees/r-* && git checkout -- a.txt'
+# amend: --reason required; an unfrozen file refused; one file opened; the decision logged.
+exits 2 sh -c 'cd .worktrees/r-* && ness contract amend a.txt'
+stderr 'reason is required'
+exits 4 sh -c 'cd .worktrees/r-* && ness contract amend free.txt --reason x'
+stderr 'not frozen'
+exits 4 sh -c 'cd .worktrees/r-* && ness contract amend api.json --reason x'
+stderr 'project-wide'
+env NESS_TEST_NOW=2026-10-09T10:00:00Z
+exec sh -c 'cd .worktrees/r-* && ness contract amend a.txt --reason "scenario 3 was wrong" --item $IR'
+stdout '^amending a\.txt'
+exec sh -c 'cd .worktrees/r-* && grep "^amend a.txt$" docs/sessions/r/contract.lock'
+exec sh -c 'cd .worktrees/r-* && grep -c "^Amend a.txt: scenario 3 was wrong \[item [^]]*\] (2026-10-09)$" docs/sessions/r/decisions.md'
+stdout '^1$'
+# While amended the edit passes check; b.txt stays frozen.
+exec sh -c 'cd .worktrees/r-* && sed -i "s/a/A/" a.txt && ness contract check'
+exec sh -c 'cd .worktrees/r-* && sed -i "s/b/B/" b.txt'
+exits 1 sh -c 'cd .worktrees/r-* && ness contract check'
+stdout '^differs\tb\.txt\t'
+exec sh -c 'cd .worktrees/r-* && git checkout -- b.txt'
+# freeze again records the new sha and closes the amendment.
+exec sh -c 'cd .worktrees/r-* && ness contract freeze a.txt'
+exec sh -c 'cd .worktrees/r-* && git hash-object a.txt'
+cp stdout $WORK/sha-a2
+exec sh -c 'cd .worktrees/r-* && grep "^$(cat $WORK/sha-a2) a.txt$" docs/sessions/r/contract.lock'
+exec sh -c '! grep amend .worktrees/r-*/docs/sessions/r/contract.lock'
+exec sh -c 'cd .worktrees/r-* && ness contract check'
+# A second session's lock on the same branch is checked too.
+exec sh -c 'cd .worktrees/r-* && git add -A && git commit -q -m amend'
+env NESS_SESSION=$C
+exec sh -c 'cd .worktrees/c-* && git merge -q $(cd ../r-* && git rev-parse HEAD) && printf "c\n" > c.txt && ness contract freeze c.txt && git add -A && git commit -q -m cfreeze'
+exec sh -c 'cd .worktrees/c-* && sed -i "s/A/Z/" a.txt'
+exits 1 sh -c 'cd .worktrees/c-* && ness contract check'
+stdout '^differs\ta\.txt\tdocs/sessions/r/contract\.lock$'
+exec sh -c 'cd .worktrees/c-* && git checkout -- a.txt'
+# A frozen file gone from every lock is named, whichever way it went (R-CTR-003).
+# rm of the lock:
+exec sh -c 'cd .worktrees/c-* && rm docs/sessions/r/c/contract.lock'
+exits 1 sh -c 'cd .worktrees/c-* && ness contract check'
+stdout '^missing\tc\.txt\tdocs/sessions/r/c/contract\.lock$'
+exec sh -c 'cd .worktrees/c-* && git checkout -- docs/sessions/r/c/contract.lock && ness contract check'
+# an emptied lock:
+exec sh -c 'cd .worktrees/c-* && : > docs/sessions/r/c/contract.lock'
+exits 1 sh -c 'cd .worktrees/c-* && ness contract check'
+stdout '^missing\tc\.txt\tdocs/sessions/r/c/contract\.lock$'
+exec sh -c 'cd .worktrees/c-* && git checkout -- docs/sessions/r/c/contract.lock'
+# one entry removed from a lock:
+exec sh -c 'cd .worktrees/c-* && sed -i "/ b.txt$/d" docs/sessions/r/contract.lock'
+exits 1 sh -c 'cd .worktrees/c-* && ness contract check'
+stdout '^missing\tb\.txt\tdocs/sessions/r/contract\.lock$'
+! stdout 'a\.txt'
+exec sh -c 'cd .worktrees/c-* && git checkout -- docs/sessions/r/contract.lock'
+# a lock created and deleted inside the branch (committed, so HEAD has neither):
+exec sh -c 'cd .worktrees/c-* && git rm -q docs/sessions/r/c/contract.lock && git commit -q -m rmc'
+exits 1 sh -c 'cd .worktrees/c-* && ness contract check'
+stdout '^missing\tc\.txt\tdocs/sessions/r/c/contract\.lock$'
+exec sh -c 'cd .worktrees/c-* && git reset -q --hard HEAD~1 && ness contract check'
+# a lock removed in a commit while base holds it:
+exec sh -c 'git merge -q $(cd .worktrees/r-* && git rev-parse HEAD)'
+exec sh -c 'cd .worktrees/c-* && git rev-parse HEAD > ../chead && git reset -q --hard main'
+exec sh -c 'cd .worktrees/c-* && git rm -q docs/sessions/r/contract.lock && git commit -q -m rmlock'
+exits 1 sh -c 'cd .worktrees/c-* && ness contract check'
+stdout '^missing\ta\.txt\tdocs/sessions/r/contract\.lock$'
+exec sh -c 'cd .worktrees/c-* && git reset -q --hard $(cat ../chead) && ness contract check'
+# check never opens the store or the caller: a stale NESS_SESSION is fine, a fresh clone is fine.
+env NESS_SESSION=s-stale
+exec sh -c 'cd .worktrees/c-* && ness contract check'
+stdout '^ok\t'
+exec git clone -q . $WORK/clone
+cd $WORK/clone
+exec ness contract check
+stdout '^ok\t'
+! exists .git/ness
+cd $WORK/repo
+env NESS_SESSION=$C
+# A failed lock write leaves the decision logged and the lock unchanged (the lock is replaced
+# atomically, so an unwritable record directory cannot truncate it).
+exec sh -c 'cd .worktrees/c-*/docs/sessions/r/c && touch decisions.md && chmod 0500 .'
+! exec sh -c 'cd .worktrees/c-* && ness contract amend c.txt --reason "no write" --item $IC'
+stderr 'decision is logged but the lock was not changed'
+exec sh -c 'cd .worktrees/c-*/docs/sessions/r/c && chmod 0750 . && grep -c "^Amend c.txt: no write" decisions.md'
+stdout '^1$'
+exec sh -c 'cd .worktrees/c-*/docs/sessions/r/c && ! grep amend contract.lock'
+# A malformed lock version in the branch's history holds no paths and is skipped (R-CTR-044); the
+# earlier valid version still freezes its paths.
+exec sh -c 'cd .worktrees/c-* && printf "garbage\n" > docs/sessions/r/c/contract.lock && git add -A && git commit -q -m bad && git checkout HEAD~1 -- docs/sessions/r/c/contract.lock'
+exec sh -c 'cd .worktrees/c-* && ness contract check'
+stdout '^ok\t'
+exec sh -c 'cd .worktrees/c-* && git reset -q --hard HEAD~1'
+# A git error fails closed: a base that does not resolve is exit 1 with the error, never ok.
+exec sh -c 'cd .worktrees/c-* && sed -i "s/^base = .*/base = \"nobase\"/" .ness/ness.toml'
+exits 1 sh -c 'cd .worktrees/c-* && ness contract check'
+stderr 'merge-base nobase HEAD'
+exec sh -c 'cd .worktrees/c-* && git checkout -- .ness/ness.toml'
+# A project-wide path absent at base is a problem (exit 1), not a usage error.
+exec sh -c 'sed -i "s/\"api.json\"/\"api.json\", \"ghost.json\"/" .ness/ness.toml && git commit -q -am ghost && cd .worktrees/c-* && git merge -q main'
+exits 1 sh -c 'cd .worktrees/c-* && ness contract check'
+stderr 'ghost\.json'
+exec sh -c 'git revert --no-edit HEAD && cd .worktrees/c-* && git merge -q main'
+# A malformed lock fails closed, naming it.
+exec sh -c 'cd .worktrees/c-* && printf "garbage\n" > docs/sessions/r/c/contract.lock'
+exits 1 sh -c 'cd .worktrees/c-* && ness contract check'
+stderr 'docs/sessions/r/c/contract\.lock.*line 1'
+
+-- b.md --
+b

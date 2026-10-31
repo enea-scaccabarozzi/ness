@@ -1,0 +1,146 @@
+# For a bound session, pre-tool judges every Agent call against the selector's rung (base standard:
+# search = economy sonnet/medium): above it is refused with exit 2 naming both rungs, the reason and
+# the ways out; one escalate buys one rung; named agents carry their rung; a fork passes; a pair
+# that is off the ladder or half given, or a call with no kind, is refused with the list it needs;
+# enforce = "log" never refuses; every decision lands in the store and in ness stats --json;
+# unbound, everything passes.
+# covers: R-HOOK-034, R-HOOK-035, R-HOOK-036, R-HOOK-037, R-MOD-060, R-MOD-061
+cd repo
+exec ness init --gate true --base main --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+store add-launch s-aaaaaaaaaaaa root - tier=standard client=claude
+env NESS_SESSION=s-aaaaaaaaaaaa
+
+# Rejects: a hook that refuses (or speaks on) a call at the recommended rung.
+stdin ../at.json
+exec ness hook pre-tool
+! stdout .
+! stderr .
+
+# Rejects: a refusal that hides the requested or recommended rung, the reason, or the ways out.
+stdin ../above.json
+exits 2 ness hook pre-tool
+stderr 'standard'
+stderr 'economy'
+stderr 'sonnet/medium'
+stderr 'kind search'
+stderr 'escalate: '
+stderr 'skill ness-entry, section Model and effort'
+
+# Rejects: an escalate that is ignored for the one rung it buys.
+stdin ../escalate-one.json
+exec ness hook pre-tool
+! stderr .
+
+# Rejects: an escalate that buys more than one rung (Review Focus).
+stdin ../escalate-two.json
+exits 2 ness hook pre-tool
+stderr 'one rung'
+
+# Rejects: refusing a cheaper rung than recommended.
+stdin ../below.json
+exec ness hook pre-tool
+! stderr .
+
+# Rejects: demanding a pair from a named agent that carries its own rung.
+stdin ../sweep.json
+exec ness hook pre-tool
+! stderr .
+
+# Rejects: trusting the agent name over an explicit pair above its rung (Review Focus).
+stdin ../sweep-fable.json
+exits 2 ness hook pre-tool
+stderr 'frontier'
+stderr 'economy'
+
+# Rejects: defaulting an unnamed call without a kind to base instead of listing the kinds.
+stdin ../nokind.json
+exits 2 ness hook pre-tool
+stderr 'search'
+stderr 'implement'
+stderr 'design'
+
+# Rejects: a full model id that crashes, passes, or is refused without the ladder (Review Focus).
+stdin ../fullid.json
+exits 2 ness hook pre-tool
+stderr 'economy +sonnet/medium'
+stderr 'apex +fable/high'
+stderr 'ness pick'
+
+# Rejects: a model without an effort refused when the kind's rung has that model (the effort
+# defaults to the rung's), or a default effort given to a model the kind's rung does not use.
+stdin ../modelonly.json
+exec ness hook pre-tool
+! stderr .
+stdin ../modelonly-off.json
+exits 2 ness hook pre-tool
+stderr 'economy +sonnet/medium'
+
+# Rejects: a fork judged as an unnamed agent without a pair.
+stdin ../fork.json
+exec ness hook pre-tool
+! stderr .
+
+# Rejects: the legacy Task tool slipping past the rung check.
+stdin ../task-above.json
+exits 2 ness hook pre-tool
+stderr 'economy'
+
+# Rejects: a log mode that still refuses, the call above and the one with no kind alike.
+cp ../log.toml .ness/ness.toml
+exec git commit -q -am 'enforce log'
+stdin ../above.json
+exec ness hook pre-tool
+stdin ../nokind.json
+exec ness hook pre-tool
+
+# Rejects: decisions that are not stored, or stored under the wrong verdict.
+exec ness stats --json
+stdout '"allowed": 3'
+stdout '"below": 1'
+stdout '"escalated": 1'
+stdout '"refused": 7'
+stdout '"would_refuse": 2'
+stdout '"fork": 1'
+
+# Rejects: a hook that judges calls of a session it is not bound to.
+env NESS_SESSION=
+stdin ../above.json
+exec ness hook pre-tool
+! stdout .
+! stderr .
+
+-- at.json --
+{"tool_name":"Agent","tool_input":{"description":"d","prompt":"kind: search\nfind x","subagent_type":"general-purpose","model":"sonnet","effort":"medium"}}
+-- above.json --
+{"tool_name":"Agent","tool_input":{"description":"d","prompt":"kind: search\nfind x","subagent_type":"general-purpose","model":"opus","effort":"medium"}}
+-- escalate-one.json --
+{"tool_name":"Agent","tool_input":{"description":"d","prompt":"kind: search\nescalate: needs judgment\nfind x","subagent_type":"general-purpose","model":"opus","effort":"low"}}
+-- escalate-two.json --
+{"tool_name":"Agent","tool_input":{"description":"d","prompt":"kind: search\nescalate: needs judgment\nfind x","subagent_type":"general-purpose","model":"opus","effort":"medium"}}
+-- below.json --
+{"tool_name":"Agent","tool_input":{"description":"d","prompt":"kind: design\nweigh x","subagent_type":"general-purpose","model":"sonnet","effort":"medium"}}
+-- sweep.json --
+{"tool_name":"Agent","tool_input":{"description":"d","prompt":"find x","subagent_type":"ness-sweep"}}
+-- sweep-fable.json --
+{"tool_name":"Agent","tool_input":{"description":"d","prompt":"find x","subagent_type":"ness-sweep","model":"fable","effort":"medium"}}
+-- nokind.json --
+{"tool_name":"Agent","tool_input":{"description":"d","prompt":"find x","subagent_type":"general-purpose","model":"sonnet","effort":"medium"}}
+-- fullid.json --
+{"tool_name":"Agent","tool_input":{"description":"d","prompt":"kind: search\nfind x","subagent_type":"general-purpose","model":"claude-opus-5-5","effort":"medium"}}
+-- modelonly.json --
+{"tool_name":"Agent","tool_input":{"description":"d","prompt":"kind: search\nfind x","subagent_type":"general-purpose","model":"sonnet"}}
+-- modelonly-off.json --
+{"tool_name":"Agent","tool_input":{"description":"d","prompt":"kind: search\nfind x","subagent_type":"general-purpose","model":"opus"}}
+-- fork.json --
+{"tool_name":"Agent","tool_input":{"description":"d","prompt":"carry on","subagent_type":"fork"}}
+-- task-above.json --
+{"tool_name":"Task","tool_input":{"description":"d","prompt":"Kind: Search\nfind x","subagent_type":"general-purpose","model":"opus","effort":"medium"}}
+-- log.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"
+[models]
+enforce = "log"

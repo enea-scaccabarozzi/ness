@@ -1,0 +1,85 @@
+# --resume continues a stalled launch from its phase, relaunches an exited session resuming its
+# transcript one tier up, replaces the brief, and refuses a running session.
+# covers: R-SESS-033, R-SESS-045, R-SESS-047, R-SESS-049, R-SESS-050, R-SESS-051
+cd repo
+exec ness init --gate true --base main --yes
+cp ../ness.toml .ness/ness.toml
+exec git add -A
+exec git commit -q -m 'ness init'
+# Stall: the fake never writes the mark; open exits 4 naming --resume and status shows it.
+fake herdr ready-on-start false
+env NESS_TEST_NOW=2026-10-08T10:00:00Z
+exits 4 ness open --root --scope prog --tier standard --brief ../b1.md
+stderr 'ness open --resume s-[0-9a-f]{12}'
+store last-session R
+store session $R phase=waiting-ready ready=false
+# Only the manager (here the operator) or the operator resumes it, not another session.
+store add-session s-bbbbbbbbbbbb other
+env NESS_SESSION=s-bbbbbbbbbbbb
+exits 4 ness open --resume $R
+stderr 'only s-[0-9a-f]{12}''s manager or the operator resumes it'
+env NESS_SESSION=
+# (status shows it as `stalled launch`: status.txtar)
+# Resume: the agent is gone, so it restarts in the same tab (run 1); one worktree, one tab, the
+# mark arrives, the brief is replaced (R-SESS-049).
+fake herdr exit p-prog
+fake herdr ready-on-start true
+# --tier on a stalled resume is recorded (R-SESS-051).
+exec ness open --resume $R --tier economy --brief ../b2.md
+stdout '^resumed s-[0-9a-f]{12} run 1 tier economy \(explicit\)$'
+store session $R phase=ready run=1 tier=economy
+fake herdr args '--model sonnet '
+fake herdr tabs 1
+exec git worktree list
+stdout -count=1 'worktrees/'
+exec sh -c 'cmp ../b2.md .worktrees/prog-*/docs/sessions/prog/brief.md'
+# A pane read error is not "exited": refused, no new tab (R-SESS-050).
+fake herdr fail 'agent get'
+exits 4 ness open --resume $R
+stderr 'could not be read'
+fake herdr tabs 1
+# Running: refused, no new tab.
+exits 4 ness open --resume $R
+stderr 'running'
+fake herdr tabs 1
+# Exited: relaunched in a new run, resuming the client's transcript (found under the user's
+# home), one tier up, with the brief replaced again.
+store get $R client_session CS
+exec sh -c 'd=$(cd .worktrees/prog-* && pwd -P); p=$HOME/.claude/projects/$(echo $d | sed "s/[^A-Za-z0-9]/-/g"); mkdir -p $p; echo "{}" > $p/$CS.jsonl'
+fake herdr exit p-prog
+exec ness open --resume $R --tier frontier --brief ../b3.md
+stdout '^resumed s-[0-9a-f]{12} run 2 tier frontier \(explicit\) \(old tab wF:t1 kept\)$'
+store session $R run=2 tier=frontier phase=ready router_reason=explicit
+fake herdr tabs 2
+fake herdr args '^--resume [0-9a-f-]{36} --remote-control=p/prog --model fable --effort medium '
+exec sh -c 'cmp ../b3.md .worktrees/prog-*/docs/sessions/prog/brief.md'
+# A closed session cannot be resumed.
+store close-session $R
+exits 4 ness open --resume $R
+stderr 'closed'
+# A launch that fails after registration names the session and --resume, never close (P3b); the
+# plain retry is refused toward --resume too, and --resume finishes the launch.
+fake herdr fail 'tab create'
+! exec ness open --root --scope fix --tier standard --brief ../b1.md
+stderr '^ness: session s-[0-9a-f]{12}: opening-tab: .*injected failure.*then run ness open --resume s-[0-9a-f]{12}$'
+store last-session F
+exits 4 ness open --root --scope fix --tier standard --brief ../b1.md
+stderr 'scope fix is already open under operator as s-[0-9a-f]{12}; ness open --resume s-'
+stderr $F
+! stderr close
+exec ness open --resume $F
+stdout '^resumed s-[0-9a-f]{12} run 1$'
+
+-- ness.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "true"
+[launch]
+ready_timeout = "200ms"
+-- b1.md --
+one
+-- b2.md --
+two
+-- b3.md --
+three

@@ -1,0 +1,43 @@
+# A broken or invalid ness.toml is refused (exit 4), naming the position or key, and nothing is written.
+# covers: R-CFG-003, R-CFG-004, R-CFG-040, R-CFG-043
+cd repo
+snap before
+exits 4 ness sync --check
+stderr '\.ness/ness\.toml:5:\d+:'
+samesnap before
+
+cp ../bad-enum.toml .ness/ness.toml
+exits 4 ness sync --check
+stderr 'client = "gpt": accepted values are claude, codex'
+
+cp ../unknown.toml .ness/ness.toml
+exits 4 ness sync --check
+stderr 'unknown key worker\.stal_minutes'
+
+cp ../no-gate.toml .ness/ness.toml
+exits 4 ness sync --check
+stderr 'gate is required'
+
+-- repo/.ness/ness.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "make validate"
+x = ]
+-- bad-enum.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "make validate"
+client = "gpt"
+-- unknown.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "make validate"
+[worker]
+stal_minutes = 5
+-- no-gate.toml --
+ness = "0.1"
+project = "p"
+base = "main"

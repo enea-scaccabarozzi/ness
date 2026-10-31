@@ -1,0 +1,41 @@
+# The worker posts each operator alert to the thread alerts:<root>, the root being the operator's
+# child at the top of the sender's tree: a root's own item and its child's share one key, another
+# root's item gets its own. Rejects an implementation that keys the thread by the sender or posts
+# without a thread (the review's F9: this was a white-box test of an unexported function).
+# covers: R-WRK-082
+cd repo
+exec ness init --gate true --base main --yes
+exec sh -c 'cat ../channels.toml >> .ness/ness.toml'
+exec git add -A
+exec git commit -q -m 'ness init'
+env NESS_TEST_NOW=2026-10-08T10:00:00Z
+fake herdr version 0.8.2
+exec ness open --root --scope prog-one --tier standard --brief ../b.md
+store last-session R1
+exec ness open --root --scope prog-two --tier standard --brief ../b.md
+store last-session R2
+env NESS_SESSION=$R1
+exec ness open --scope child --tier standard --brief ../b.md
+store last-session C1
+exec ness send --to operator --intent request --body 'root one asks'
+env NESS_SESSION=$C1
+exec ness send --to operator --intent request --body 'child of one asks'
+env NESS_SESSION=$R2
+exec ness send --to operator --intent request --body 'root two asks'
+env NESS_SESSION=
+exec ness worker run --once
+exec sort $WORK/keys
+cp stdout ../sorted
+grep -count=2 'alerts:'$R1 ../sorted
+grep -count=1 'alerts:'$R2 ../sorted
+! grep $C1 ../sorted
+
+-- b.md --
+b
+-- channels.toml --
+features = ["notify"]
+[notify]
+operator = "log"
+[notify.channels.log]
+kind = "command"
+command = "cat > /dev/null; echo $NESS_THREAD_KEY >> $WORK/keys"

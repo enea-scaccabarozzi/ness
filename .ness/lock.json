@@ -1,0 +1,227 @@
+{
+  "entries": [
+    {
+      "hash": "5aeba81c45de10596d116733b0ed8fe7078c19a51cd4783023627b07b6dc9feb",
+      "id": ".agents/skills/ness-compliance-check/SKILL.md",
+      "kind": "file",
+      "owner": "go-strict",
+      "path": ".agents/skills/ness-compliance-check/SKILL.md",
+      "upstream": "5aeba81c45de10596d116733b0ed8fe7078c19a51cd4783023627b07b6dc9feb"
+    },
+    {
+      "hash": "4b00f47f903f07f743aba66e86ea20079b32c8853b8ffbb8753ba182e3730718",
+      "id": ".agents/skills/ness-documentation/SKILL.md",
+      "kind": "file",
+      "owner": "go-strict",
+      "path": ".agents/skills/ness-documentation/SKILL.md",
+      "upstream": "4b00f47f903f07f743aba66e86ea20079b32c8853b8ffbb8753ba182e3730718"
+    },
+    {
+      "hash": "1119953d255c86e56a832caaec7ab62324c92c2db3c318d179fe419683a484f2",
+      "id": ".agents/skills/ness-entry/SKILL.md",
+      "kind": "file",
+      "owner": "core",
+      "path": ".agents/skills/ness-entry/SKILL.md",
+      "upstream": "1119953d255c86e56a832caaec7ab62324c92c2db3c318d179fe419683a484f2"
+    },
+    {
+      "hash": "e40e7b03ec2571b68acccae0e5d63187eeda832e7fb43e03bc3e03313fbb5099",
+      "id": ".agents/skills/ness-interface-design/SKILL.md",
+      "kind": "file",
+      "owner": "go-strict",
+      "path": ".agents/skills/ness-interface-design/SKILL.md",
+      "upstream": "e40e7b03ec2571b68acccae0e5d63187eeda832e7fb43e03bc3e03313fbb5099"
+    },
+    {
+      "hash": "e74fe6b0e34e49e23dad9da73af0d0bb0657ece236bbb55b5be8c75312303a48",
+      "id": ".agents/skills/ness-launch/SKILL.md",
+      "kind": "file",
+      "owner": "core",
+      "path": ".agents/skills/ness-launch/SKILL.md",
+      "upstream": "e74fe6b0e34e49e23dad9da73af0d0bb0657ece236bbb55b5be8c75312303a48"
+    },
+    {
+      "hash": "f7a69dabce3beee97ac26cf9abdd592b8a7d757a3c3b0d1468f3080fad70c123",
+      "id": ".agents/skills/ness-notify/SKILL.md",
+      "kind": "file",
+      "owner": "feature/notify",
+      "path": ".agents/skills/ness-notify/SKILL.md",
+      "upstream": "f7a69dabce3beee97ac26cf9abdd592b8a7d757a3c3b0d1468f3080fad70c123"
+    },
+    {
+      "hash": "4b2859544b21d83a468eff248975b5feabd86dd792f5d3bf1e41d73c1fba621f",
+      "id": ".agents/skills/ness-test-discipline/SKILL.md",
+      "kind": "file",
+      "owner": "go-strict",
+      "path": ".agents/skills/ness-test-discipline/SKILL.md",
+      "upstream": "4b2859544b21d83a468eff248975b5feabd86dd792f5d3bf1e41d73c1fba621f"
+    },
+    {
+      "hash": "ecd18ed508239b8204bc14d670100b2f365ff314261b5e442ef2705476fd6f3c",
+      "id": ".agents/skills/ness-test-strategy/SKILL.md",
+      "kind": "file",
+      "owner": "go-strict",
+      "path": ".agents/skills/ness-test-strategy/SKILL.md",
+      "upstream": "ecd18ed508239b8204bc14d670100b2f365ff314261b5e442ef2705476fd6f3c"
+    },
+    {
+      "hash": "0bddb3c40611e1f8c50a12dfa81606ed2d0cfa706f32bde38b19a8a08c7c4674",
+      "id": ".claude/agents/ness-design.md",
+      "kind": "file",
+      "owner": "core",
+      "path": ".claude/agents/ness-design.md",
+      "upstream": "0bddb3c40611e1f8c50a12dfa81606ed2d0cfa706f32bde38b19a8a08c7c4674"
+    },
+    {
+      "hash": "029cfbe3181877960d9d68bcc334f0415a2250db946942f80fb198e23a0cca0e",
+      "id": ".claude/agents/ness-review.md",
+      "kind": "file",
+      "owner": "core",
+      "path": ".claude/agents/ness-review.md",
+      "upstream": "029cfbe3181877960d9d68bcc334f0415a2250db946942f80fb198e23a0cca0e"
+    },
+    {
+      "hash": "c064fe6fbc747d259d94f5356d7898d582873e9124f3582f72afa7bd223543f6",
+      "id": ".claude/agents/ness-sweep.md",
+      "kind": "file",
+      "owner": "core",
+      "path": ".claude/agents/ness-sweep.md",
+      "upstream": "c064fe6fbc747d259d94f5356d7898d582873e9124f3582f72afa7bd223543f6"
+    },
+    {
+      "hash": "32dbadcc0dfdfab8d2a77a6f67a6d31fa95313c56ffc5ac9e9726451c854ad00",
+      "id": ".claude/agents/ness-verify.md",
+      "kind": "file",
+      "owner": "core",
+      "path": ".claude/agents/ness-verify.md",
+      "upstream": "32dbadcc0dfdfab8d2a77a6f67a6d31fa95313c56ffc5ac9e9726451c854ad00"
+    },
+    {
+      "hash": "54b8f797c71bec0254230622d533f52c6b0b3bf45da903108944df7671a4fbfe",
+      "id": ".claude/settings.json:autoCompactWindow",
+      "kind": "key",
+      "owner": "core",
+      "path": ".claude/settings.json",
+      "upstream": "54b8f797c71bec0254230622d533f52c6b0b3bf45da903108944df7671a4fbfe"
+    },
+    {
+      "hash": "64cf7274ef5e9d5b9655b1fc69bb348cebe0d6dbe5fd531286991d6b05be3c00",
+      "id": ".claude/settings.json:env.CLAUDE_CODE_SUBAGENT_MODEL",
+      "kind": "key",
+      "owner": "core",
+      "path": ".claude/settings.json",
+      "upstream": "64cf7274ef5e9d5b9655b1fc69bb348cebe0d6dbe5fd531286991d6b05be3c00"
+    },
+    {
+      "hash": "544549b950bc8ad08b87a6cc2f561cfa5ef9e71400bf75e59497fa560883450c",
+      "id": ".claude/settings.json:hooks.PreToolUse[ness hook pre-tool]",
+      "kind": "key",
+      "owner": "core",
+      "path": ".claude/settings.json",
+      "upstream": "544549b950bc8ad08b87a6cc2f561cfa5ef9e71400bf75e59497fa560883450c"
+    },
+    {
+      "hash": "a9cda88dbb99f9af0ccca5b75e9c1a4d6faceab8a0edaf86d8c69987d058549d",
+      "id": ".claude/settings.json:hooks.SessionStart[ness hook session-start]",
+      "kind": "key",
+      "owner": "core",
+      "path": ".claude/settings.json",
+      "upstream": "a9cda88dbb99f9af0ccca5b75e9c1a4d6faceab8a0edaf86d8c69987d058549d"
+    },
+    {
+      "hash": "3c74c93317f015d16370349a76529b6f8332c808bdd589e7640eeba6a1b1b874",
+      "id": ".claude/skills",
+      "kind": "link",
+      "owner": "core",
+      "path": ".claude/skills",
+      "upstream": "3c74c93317f015d16370349a76529b6f8332c808bdd589e7640eeba6a1b1b874"
+    },
+    {
+      "hash": "77fac72bb273579361d7614a4cd698d646ba336dbf114454330f5fa3df85c2d3",
+      "id": ".gitignore#core/ignore",
+      "kind": "block",
+      "owner": "core",
+      "path": ".gitignore",
+      "upstream": "77fac72bb273579361d7614a4cd698d646ba336dbf114454330f5fa3df85c2d3"
+    },
+    {
+      "hash": "6992fed282ddcbeec703ba2ed3e868d3aa8472f1bbf54b6623f27ee3e0f92759",
+      "id": ".golangci.tests.yml",
+      "kind": "file",
+      "owner": "go-strict",
+      "path": ".golangci.tests.yml",
+      "upstream": "6992fed282ddcbeec703ba2ed3e868d3aa8472f1bbf54b6623f27ee3e0f92759"
+    },
+    {
+      "hash": "acd8d75c3c2194cec2343fd0f82508d3395c8c9db592b9735ed9fd80c5a98d37",
+      "id": ".golangci.yml",
+      "kind": "file",
+      "owner": "go-strict",
+      "path": ".golangci.yml",
+      "upstream": "acd8d75c3c2194cec2343fd0f82508d3395c8c9db592b9735ed9fd80c5a98d37"
+    },
+    {
+      "hash": "09bc5d12281ff42030eba74f407fbb3fdfaf532caafe8f089f5835e09a0d1e60",
+      "id": ".ness/audit-exceptions.txt",
+      "kind": "seed",
+      "owner": "go-strict",
+      "path": ".ness/audit-exceptions.txt",
+      "upstream": "09bc5d12281ff42030eba74f407fbb3fdfaf532caafe8f089f5835e09a0d1e60"
+    },
+    {
+      "hash": "a1a67afdb77fd0d98fbe322a1de9981f65eab0c9b6c11aa129633594608b1e54",
+      "id": ".ness/audit.py",
+      "kind": "file",
+      "owner": "go-strict",
+      "path": ".ness/audit.py",
+      "upstream": "a1a67afdb77fd0d98fbe322a1de9981f65eab0c9b6c11aa129633594608b1e54"
+    },
+    {
+      "hash": "4c8169963b14208b2d192ae38806c90a141ea7cab06ab2823f876a6d79db5360",
+      "id": ".ness/audit.toml",
+      "kind": "file",
+      "owner": "go-strict",
+      "path": ".ness/audit.toml",
+      "upstream": "4c8169963b14208b2d192ae38806c90a141ea7cab06ab2823f876a6d79db5360"
+    },
+    {
+      "hash": "3f915a8138e863fc4ee7aa4ca12c8ee6db3d53b5c4872081c283881e083e0362",
+      "id": "AGENTS.md#core/router",
+      "kind": "block",
+      "owner": "core",
+      "path": "AGENTS.md",
+      "upstream": "3f915a8138e863fc4ee7aa4ca12c8ee6db3d53b5c4872081c283881e083e0362"
+    },
+    {
+      "hash": "a54ff182c7e8acf56acfd6e4b9c3ff41e2c41a31c9b211b2deb9df75d9a478f9",
+      "id": "CLAUDE.md",
+      "kind": "link",
+      "owner": "core",
+      "path": "CLAUDE.md",
+      "upstream": "a54ff182c7e8acf56acfd6e4b9c3ff41e2c41a31c9b211b2deb9df75d9a478f9"
+    },
+    {
+      "hash": "40a97dc291c9cca83e43cdb7c4b6de3111ca67c68176bb638a8b8af3a46a8c06",
+      "id": "Makefile",
+      "kind": "seed",
+      "owner": "go-strict",
+      "path": "Makefile",
+      "upstream": "a6ba7c14d616034299b5aa11fa6b44017e8401fa809634a86d4e9ff0c3fbde01"
+    },
+    {
+      "hash": "e2f1a5a25f020ad68781d619a05d71dc5f9dd6363da723ae52cc22a02a849b06",
+      "id": "lefthook.yml",
+      "kind": "file",
+      "owner": "go-strict",
+      "path": "lefthook.yml",
+      "upstream": "e2f1a5a25f020ad68781d619a05d71dc5f9dd6363da723ae52cc22a02a849b06"
+    }
+  ],
+  "ness": "0.1.0",
+  "profiles": {
+    "core": "0.1.0",
+    "go-strict": "0.1.0",
+    "local": "f12974702d89d7c80e1bff672c5b0ffd95a2321197991476a2492b3c80eecc04"
+  },
+  "schema": 1
+}
