@@ -1,4 +1,4 @@
-ness = "0.1"
+ness = "0.2"
 project = "Ness"
 base = "main"
 profiles = ["go-strict", "local"]

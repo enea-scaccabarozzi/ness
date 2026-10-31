@@ -19,7 +19,7 @@ import (
 
 // version is the release version, set at release time with -ldflags "-X main.version=<version>";
 // a binary built from a release tag takes the tag (R-QA-046).
-var version = "0.1.0"
+var version = "0.2.0" // x-release-please-version
 
 // releaseAndBuild returns the release version (the -ldflags value unless the go command stamped
 // a release tag) and the build: the commit the binary was built from, ".dirty" when the tree had

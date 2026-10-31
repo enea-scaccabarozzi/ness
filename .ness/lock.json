@@ -217,10 +217,10 @@
       "upstream": "e2f1a5a25f020ad68781d619a05d71dc5f9dd6363da723ae52cc22a02a849b06"
     }
   ],
-  "ness": "0.1.0",
+  "ness": "0.2.0",
   "profiles": {
-    "core": "0.1.0",
-    "go-strict": "0.1.0",
+    "core": "0.2.0",
+    "go-strict": "0.2.0",
     "local": "f12974702d89d7c80e1bff672c5b0ffd95a2321197991476a2492b3c80eecc04"
   },
   "schema": 1
