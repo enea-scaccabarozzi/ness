@@ -5,6 +5,14 @@ version has a "Running sessions" subsection (from `sessions:` commits): what an 
 must do after `ness sync` picks the version up. `ness sync` prints the sections between the
 lock's version and the binary's.
 
+## [0.2.1](https://github.com/enea-scaccabarozzi/ness/compare/v0.2.0...v0.2.1) (2026-10-31)
+
+
+### Bug Fixes
+
+* **release:** release-please bumps the source-build version in cmd/ness/main.go ([deb689b](https://github.com/enea-scaccabarozzi/ness/commit/deb689bcb7063185d78ba9b4cb0c28e988a72049))
+* **release:** source builds carry the release version; ness repo on 0.2 ([deb689b](https://github.com/enea-scaccabarozzi/ness/commit/deb689bcb7063185d78ba9b4cb0c28e988a72049))
+
 ## [0.2.0](https://github.com/enea-scaccabarozzi/ness/compare/v0.1.0...v0.2.0) (2026-10-31)
 
 
