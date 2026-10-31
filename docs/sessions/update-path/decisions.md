@@ -31,3 +31,5 @@ Append-only. Ids are the root's.
   after the operator's go) → rc cut and live testing on the three projects (batched, operator's
   go) → field fixes through a new integrate.
 - **UP-D11** (2026-10-31, operator, chat "Go with faster appraoch") Execution speed-up: judges written ahead in parallel; full per-task review only for tasks 2, 3, 5, 8, 10, 11, 12; the others reviewed in combined batches (4+6+7, 9, 13+14, 15, 16); final whole-branch review unchanged.
+- **UP-D12** (2026-10-31, operator, chat "we cannot gate this release") v0.2.0 promoted to stable from
+  rc.2 without waiting for the field window; field promotion applies from later releases.
