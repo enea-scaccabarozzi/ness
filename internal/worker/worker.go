@@ -43,6 +43,12 @@ type Worker struct {
 	Notify func(Alert) error
 	// Project names sessions in their client: <Project>/<title> (R-WRK-071).
 	Project string
+	// Stale reports whether the session's worktree lock is behind its base branch's (R-UPD-070);
+	// nil: the check is off.
+	Stale func(sess store.Session) (Stale, bool, error)
+	// Update runs the unattended update step after the sessions (R-UPD-050, R-UPD-080..082); its
+	// error is logged once per text under key update. Nil: no update step.
+	Update func(now time.Time) error
 
 	panes map[string]*pane         // by session id; what the worker remembers between passes
 	open  map[string]store.Session // the open sessions of this pass
@@ -115,8 +121,8 @@ func (p *pane) quiet(now time.Time, q time.Duration) bool {
 }
 
 // Pass is one pass (design §5 "Machinery"): the heartbeat (R-WRK-008), zombie retirement
-// (R-WRK-020), the due probes (R-WRK-060), then every open session's pane. The error is the
-// store's; a pane's trouble is logged and the pass goes on to the next session.
+// (R-WRK-020), the due probes (R-WRK-060), every open session's pane, then the update step. The
+// error is the store's; a pane's or the update step's trouble is logged and the pass goes on.
 func (w *Worker) Pass() error {
 	now := w.Now()
 	if err := w.Store.SetHeartbeat(now, w.Version); err != nil {
@@ -150,7 +156,20 @@ func (w *Worker) Pass() error {
 		w.visit(sess, now, fileLimit)
 	}
 	w.forget(live)
+	w.update(now)
 	return nil
+}
+
+// update runs the update step, its error logged once per text under key update.
+func (w *Worker) update(now time.Time) {
+	if w.Update == nil {
+		return
+	}
+	if err := w.Update(now); err != nil {
+		w.Log.Error("update", err)
+		return
+	}
+	w.Log.Clear("update")
 }
 
 // forget drops the memory of panes whose session is no longer open.
@@ -177,7 +196,8 @@ func (w *Worker) pane(sess store.Session) *pane {
 // nothing and one log line (R-WRK-013); a non-empty box gets nothing, focus holds nothing
 // (R-WRK-014, R-WRK-017); a limited pane is silent (R-WRK-042, R-WRK-047); otherwise
 // one resume after a reset (R-WRK-043), a compaction at the boundary (R-WRK-030) or one hint
-// (R-WRK-010, R-WRK-011, R-WRK-019). A session whose model is reported unavailable is stopped and its
+// (R-WRK-010, R-WRK-011, R-WRK-019). An idle stale session gets its update item first, which the
+// hint then covers (R-UPD-070). A session whose model is reported unavailable is stopped and its
 // manager told (R-SESS-009, R-WRK-062); a screen error or an idle spell with open obligations is
 // reported to the manager once per episode (R-WRK-050, R-WRK-051, R-WRK-052).
 func (w *Worker) visit(sess store.Session, now, fileLimit time.Time) {
@@ -204,6 +224,7 @@ func (w *Worker) visit(sess store.Session, now, fileLimit time.Time) {
 		p.working(now)
 		return
 	}
+	w.deliverUpdate(sess, now)
 	if w.observe(sess, c, p, now) {
 		w.act(sess, c, p, st.Focused, now, now.Before(fileLimit))
 	}

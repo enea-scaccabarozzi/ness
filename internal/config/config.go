@@ -43,7 +43,21 @@ type Config struct {
 	Launch       Launch          `toml:"launch"`
 	Worker       Worker          `toml:"worker"`
 	Guards       []Guard         `toml:"guards"`
+	Update       Update          `toml:"update"`
 }
+
+// Update configures the release check and unattended upgrades (R-UPD-030).
+type Update struct {
+	// Check turns the release check on.
+	Check bool `toml:"check"`
+	// Channel is the release channel: "stable" or "rc".
+	Channel string `toml:"channel"`
+	// Auto is what a newer release does: "off" (hidden), "notify" or "install".
+	Auto string `toml:"auto"`
+}
+
+// defaultUpdate is the [update] table a file leaves out.
+func defaultUpdate() Update { return Update{Check: true, Channel: "stable", Auto: "notify"} }
 
 // Guard is one [[guards]] entry: a pre-tool refusal for a tool call (R-CFG-086, R-HOOK-022).
 type Guard struct {
@@ -254,6 +268,7 @@ func defaults() Config {
 		},
 		Launch: Launch{ReadyTimeout: Duration{time.Minute}, Permissions: "skip"},
 		Worker: Worker{StallMinutes: 30, QuietSeconds: 60},
+		Update: defaultUpdate(),
 	}
 }
 
@@ -264,17 +279,26 @@ type File struct {
 	raw  map[string]any
 }
 
+// ParseError is a .ness/ness.toml that Parse refused; its text is the underlying error's.
+type ParseError struct{ Err error }
+
+func (e *ParseError) Error() string { return e.Err.Error() }
+
+// Unwrap returns the underlying error.
+func (e *ParseError) Unwrap() error { return e.Err }
+
 // Parse checks syntax (errors carry line and column, R-CFG-003) and validates the file with no
-// profile defaults, so a broken file is refused before anything else runs.
+// profile defaults, so a broken file is refused before anything else runs. Every error is a
+// *ParseError.
 func Parse(data []byte) (*File, error) {
 	f := &File{data: string(data)}
 	meta, err := toml.Decode(f.data, &f.raw)
 	if err != nil {
-		return nil, posError(err)
+		return nil, &ParseError{posError(err)}
 	}
 	f.meta = meta
 	if _, err := f.Config(nil); err != nil {
-		return nil, err
+		return nil, &ParseError{err}
 	}
 	return f, nil
 }
@@ -375,6 +399,8 @@ var enumKeys = map[string]string{
 	"client":         strings.Join(Clients, ", "),
 	"integrate.mode": strings.Join(IntegrateModes, ", "),
 	"models.policy":  strings.Join(ModelPolicies, ", "),
+	"update.channel": strings.Join(UpdateChannels, ", "),
+	"update.auto":    strings.Join(UpdateAutos, ", "),
 }
 
 func decodeMap(m map[string]any, c *Config) error {
@@ -453,6 +479,10 @@ var (
 	FeatureNames = []string{"probes", "notify", "contracts"}
 	// Experiments are the experimental opt-ins.
 	Experiments = []string{"codex"}
+	// UpdateChannels are the release channels of update.channel.
+	UpdateChannels = []string{"stable", "rc"}
+	// UpdateAutos are the values of update.auto.
+	UpdateAutos = []string{"off", "notify", "install"}
 )
 
 var (
@@ -486,7 +516,9 @@ func (c *Config) validate() error {
 		oneOf("client", c.Client, Clients...),
 		oneOf("integrate.mode", c.Integrate.Mode, IntegrateModes...),
 		c.validateModels(),
-		oneOf("launch.permissions", c.Launch.Permissions, "skip", "client"))
+		oneOf("launch.permissions", c.Launch.Permissions, "skip", "client"),
+		oneOf("update.channel", c.Update.Channel, UpdateChannels...),
+		oneOf("update.auto", c.Update.Auto, UpdateAutos...))
 	if c.Client == "codex" && !slices.Contains(c.Experimental, "codex") {
 		errs = append(errs, errors.New(`client = "codex" needs experimental = ["codex"]`))
 	}

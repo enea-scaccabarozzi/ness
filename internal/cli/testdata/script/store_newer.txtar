@@ -1,5 +1,5 @@
 # A store written by a newer ness is refused with exit 4 and the fix (R-MSG-046, R-CFG-036):
-# send and inbox write nothing, and the hook stays silent (R-HOOK-002).
+# send and inbox write nothing, and inside the session the hook blocks with the fix (R-UPD-020).
 # covers: R-MSG-046
 cd repo
 exec ness init --gate true --base main --yes
@@ -12,9 +12,9 @@ stderr 'upgrade ness'
 exits 4 ness inbox
 stderr 'upgrade ness'
 ! stdout .
-exec ness hook pre-tool
+exits 2 ness hook pre-tool
 ! stdout .
-! stderr .
+stderr 'store schema 99.*; fix: ness self-update'
 # Back at this binary's version, the refused send left no item.
 store set-version current
 store items operator 0

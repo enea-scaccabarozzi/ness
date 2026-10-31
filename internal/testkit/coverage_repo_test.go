@@ -7,9 +7,10 @@ import (
 	"github.com/enea-scaccabarozzi/ness/internal/testkit"
 )
 
-// doneAreas are the spec areas whose plans have landed (P1 to P6: every v1 area).
+// doneAreas are the spec areas whose plans have landed (P1 to P6: every v1 area), plus UPD,
+// which is red until its covering tests land.
 var doneAreas = []string{
-	"CFG", "SYNC", "PROF", "QA", "MSG", "HOOK", "MOD", "SESS", "DOC", "WRK", "NTF", "CTR", "PRB", "BLT", "STAT",
+	"CFG", "SYNC", "PROF", "QA", "MSG", "HOOK", "MOD", "SESS", "DOC", "WRK", "NTF", "CTR", "PRB", "BLT", "STAT", "UPD",
 }
 
 // deferred names ids of done areas that a review entry, a local run or publication delivers.

@@ -1,0 +1,235 @@
+# Inside a ness session (NESS_SESSION set, or a session/* branch) a pin the binary cannot run, a
+# newer store or a broken config blocks pre-tool loudly with one line naming the cause and its fix;
+# a single plain ness command still passes; session-start prints the same line instead of the
+# unbound note. Outside a session, for an unknown event, and for an unknown session in a healthy
+# project, hooks stay silent.
+# covers: R-UPD-020, R-UPD-021, R-UPD-022, R-UPD-023, R-HOOK-002, R-HOOK-016, R-HOOK-019
+cd repo
+exec ness init --gate true --base main --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+cp .ness/ness.toml $WORK/good.toml
+store add-session s-aaaaaaaaaaaa a
+env NESS_SESSION=s-aaaaaaaaaaaa
+
+# --- Pin skew: pin 0.3, binary 0.1.0 (older binary). ---
+exec sed -i 's/^ness = .*/ness = "0.3"/' .ness/ness.toml
+# rejects: today's silent fail-open on a project that does not load inside a session
+# rejects: a second copy of the fix text, or a line without the cause
+stdin ../edit.json
+exits 2 ness hook pre-tool
+stderr '^ness: hooks cannot run in this session: this project pins ness 0\.3\.x or 0\.4\.x .*; fix: ness self-update$'
+# rejects: the refusal printed alongside a usage line, a second note or the error twice
+! stderr '\n[\s\S]'
+! stdout .
+# rejects: a block that also stops the one command that repairs the skew
+stdin ../bash_ness.json
+exec ness hook pre-tool
+! stderr .
+stdin ../bash_ness_args.json
+exec ness hook pre-tool
+! stderr .
+# rejects: letting every Bash call through while blocked
+stdin ../bash_rm.json
+exits 2 ness hook pre-tool
+stderr '^ness: hooks cannot run in this session: '
+# rejects: a prefix check (first word ness) without the forbidden characters
+stdin ../bash_and.json
+exits 2 ness hook pre-tool
+stdin ../bash_amp.json
+exits 2 ness hook pre-tool
+stdin ../bash_semi.json
+exits 2 ness hook pre-tool
+stdin ../bash_pipe.json
+exits 2 ness hook pre-tool
+stdin ../bash_subst.json
+exits 2 ness hook pre-tool
+stdin ../bash_newline.json
+exits 2 ness hook pre-tool
+# rejects: a substring check (ness anywhere in the command)
+stdin ../bash_cd.json
+exits 2 ness hook pre-tool
+# rejects: a payload that does not parse treated as allowed (fail open) while blocked
+stdin ../garbage.txt
+exits 2 ness hook pre-tool
+# rejects: the session lookup before the skew check (any session id blocks)
+env NESS_SESSION=s-zzzzzzzzzzzz
+stdin ../edit.json
+exits 2 ness hook pre-tool
+stderr 'fix: ness self-update$'
+env NESS_SESSION=s-aaaaaaaaaaaa
+# A ness.toml from the newer ness carries a key this binary does not know: still the pin's fix.
+# rejects: the strict parse before the pin check (fix: correct .ness/ness.toml)
+exec sh -c '{ echo "futurekey = 1"; cat .ness/ness.toml; } > $WORK/newer.toml'
+cp .ness/ness.toml $WORK/pin03.toml
+cp $WORK/newer.toml .ness/ness.toml
+stdin ../edit.json
+exits 2 ness hook pre-tool
+stderr '^ness: hooks cannot run in this session: this project pins ness 0\.3\.x or 0\.4\.x .*; fix: ness self-update$'
+cp $WORK/pin03.toml .ness/ness.toml
+# rejects: session-start staying silent, or printing the unbound note too
+stdin ../startup.json
+exec ness hook session-start
+stdout '^ness: hooks cannot run in this session: this project pins ness 0\.3\.x or 0\.4\.x .*; fix: ness self-update$'
+! stdout 'not a ness session'
+! stderr .
+# rejects: an unknown event treated as skew (R-HOOK-016 fails open)
+exec ness hook nope
+! stdout .
+! stderr .
+
+# --- Pin older than N-1: pin 0.1, binary 0.3.0. ---
+exec sed -i 's/^ness = .*/ness = "0.1"/' .ness/ness.toml
+env NESS_TEST_VERSION=0.3.0
+# rejects: one fix text for both pin directions
+stdin ../edit.json
+exits 2 ness hook pre-tool
+stderr '^ness: hooks cannot run in this session: .*; fix: run ness upgrade in the base checkout; open sessions then merge their base$'
+! stderr 'self-update'
+! stderr '\n[\s\S]'
+stdin ../startup.json
+exec ness hook session-start
+stdout '^ness: hooks cannot run in this session: .*; fix: run ness upgrade in the base checkout; open sessions then merge their base$'
+! stdout 'not a ness session'
+env NESS_TEST_VERSION=
+cp $WORK/good.toml .ness/ness.toml
+
+# --- Newer store: schema 99. ---
+store set-version 99
+# rejects: the store refusal passed through raw (upgrade ness) without the one fix
+stdin ../edit.json
+exits 2 ness hook pre-tool
+stderr '^ness: hooks cannot run in this session: .*store schema 99, binary schema [0-9]+.*; fix: ness self-update \(ness doctor shows the rollback\)$'
+! stderr '\n[\s\S]'
+stdin ../bash_ness.json
+exec ness hook pre-tool
+! stderr .
+stdin ../startup.json
+exec ness hook session-start
+stdout '^ness: hooks cannot run in this session: .*store schema 99'
+! stdout 'not a ness session'
+store set-version current
+
+# --- Broken config: an unknown top-level key. ---
+exec sh -c '{ echo "bogus = 1"; cat $WORK/good.toml; } > .ness/ness.toml'
+# rejects: a config error left unbound (only pin and store treated as skew)
+stdin ../edit.json
+exits 2 ness hook pre-tool
+stderr '^ness: hooks cannot run in this session: .*unknown key bogus.*; fix: correct \.ness/ness\.toml$'
+! stderr '\n[\s\S]'
+stdin ../startup.json
+exec ness hook session-start
+stdout '^ness: hooks cannot run in this session: .*unknown key bogus'
+! stdout 'not a ness session'
+cp $WORK/good.toml .ness/ness.toml
+
+# --- A config that parses but does not resolve: an unknown profile. ---
+exec sh -c '{ echo "profiles = [\"nosuch-profile\"]"; cat $WORK/good.toml; } > .ness/ness.toml'
+stdin ../edit.json
+exits 2 ness hook pre-tool
+stderr '^ness: hooks cannot run in this session: .*nosuch-profile.*; fix: correct \.ness/ness\.toml$'
+# rejects: session-start printing the identity and cheat sheet as if the config loaded
+stdin ../startup.json
+exec ness hook session-start
+stdout '^ness: hooks cannot run in this session: .*nosuch-profile.*; fix: correct \.ness/ness\.toml$'
+! stdout '\n[\s\S]'
+! stdout 'not a ness session'
+cp $WORK/good.toml .ness/ness.toml
+
+# --- Outside a session: no NESS_SESSION, branch main. Every cause is silent. ---
+# rejects: blocking every client in the project, not only ness sessions
+env NESS_SESSION=
+exec sed -i 's/^ness = .*/ness = "0.3"/' .ness/ness.toml
+stdin ../edit.json
+exec ness hook pre-tool
+! stdout .
+! stderr .
+stdin ../startup.json
+exec ness hook session-start
+! stdout .
+! stderr .
+exec sed -i 's/^ness = .*/ness = "0.1"/' .ness/ness.toml
+env NESS_TEST_VERSION=0.3.0
+stdin ../edit.json
+exec ness hook pre-tool
+! stdout .
+! stderr .
+stdin ../startup.json
+exec ness hook session-start
+! stdout .
+! stderr .
+env NESS_TEST_VERSION=
+cp $WORK/good.toml .ness/ness.toml
+store set-version 99
+stdin ../edit.json
+exec ness hook pre-tool
+! stdout .
+! stderr .
+stdin ../startup.json
+exec ness hook session-start
+! stdout .
+! stderr .
+store set-version current
+exec sh -c '{ echo "bogus = 1"; cat $WORK/good.toml; } > .ness/ness.toml'
+stdin ../edit.json
+exec ness hook pre-tool
+! stdout .
+! stderr .
+stdin ../startup.json
+exec ness hook session-start
+! stdout .
+! stderr .
+cp $WORK/good.toml .ness/ness.toml
+
+# --- Adopted root: no NESS_SESSION, branch session/r-1. ---
+# rejects: a session test that reads only NESS_SESSION
+env CLAUDE_CODE_SESSION_ID=
+exec git checkout -q -b session/r-1
+store set-version 99
+stdin ../edit.json
+exits 2 ness hook pre-tool
+stderr '^ness: hooks cannot run in this session: .*store schema 99'
+store set-version current
+# rejects: the unbound note printed on a session branch whose config does not load
+exec sh -c '{ echo "bogus = 1"; cat $WORK/good.toml; } > .ness/ness.toml'
+stdin ../startup.json
+exec ness hook session-start
+stdout '^ness: hooks cannot run in this session: .*unknown key bogus'
+! stdout 'not a ness session'
+cp $WORK/good.toml .ness/ness.toml
+exec git checkout -q main
+
+# --- A healthy project and a session the store does not know: silent. ---
+# rejects: an unknown session id treated as skew
+env NESS_SESSION=s-zzzzzzzzzzzz
+stdin ../edit.json
+exec ness hook pre-tool
+! stdout .
+! stderr .
+
+-- edit.json --
+{"hook_event_name":"PreToolUse","tool_name":"Edit","tool_input":{"file_path":"x","old_string":"a","new_string":"b"}}
+-- bash_ness.json --
+{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"ness doctor"}}
+-- bash_ness_args.json --
+{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"  ness self-update --check"}}
+-- bash_rm.json --
+{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"rm x"}}
+-- bash_and.json --
+{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"ness doctor && rm -rf x"}}
+-- bash_amp.json --
+{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"ness doctor & rm -rf x"}}
+-- bash_semi.json --
+{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"ness doctor; rm x"}}
+-- bash_pipe.json --
+{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"ness doctor | sh"}}
+-- bash_subst.json --
+{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"ness $(rm x)"}}
+-- bash_newline.json --
+{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"ness doctor\nrm x"}}
+-- bash_cd.json --
+{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"cd x && ness sync"}}
+-- startup.json --
+{"hook_event_name":"SessionStart","source":"startup","session_id":"0bad0bad-0000-4000-8000-000000000001"}
+-- garbage.txt --
+{not json at all

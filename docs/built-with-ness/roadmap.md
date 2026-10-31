@@ -6,9 +6,8 @@ description: The work that is known and owned but not yet scheduled, and when ea
 The work that is known and owned but not yet scheduled lives in one file,
 [the backlog](../backlog.md). Each entry names when it becomes due.
 
-The largest item is the update path: how an installed ness and its projects move to a new
-release. It needs its own design session. Until then the update is manual: see
-[Upgrade ness](../guides/upgrade.md).
+The update path, how an installed ness and its projects move to a new release, has shipped: see
+[Upgrade ness](../guides/upgrade.md) and [Compatibility](../concepts/compatibility.md).
 
-The other open items came from field runs. They include a gate lock that covers more than
-`ness integrate`, and branch builds that migrate the shared store under the installed binary.
+The open items came from field runs. They include a gate lock that covers more than
+`ness integrate`.

@@ -49,6 +49,7 @@ func Setup(e *testscript.Env) error {
 	// launch.max_children defaults to half the cores: scripts open several children on any runner.
 	e.Setenv("GOMAXPROCS", "8")
 	e.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	e.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
 	if err := os.MkdirAll(home, 0o750); err != nil {
 		return err
 	}
@@ -74,6 +75,8 @@ func Setup(e *testscript.Env) error {
 		return err
 	}
 	e.Setenv("NESS_TEST_FAKES", fakes)
+	// A refused port: no script reaches GitHub; the releases command points it at a fake.
+	e.Setenv("NESS_RELEASES_URL", "http://127.0.0.1:9")
 	goCacheEnv(e)
 	return nil
 }
@@ -130,15 +133,24 @@ func insideTemp(dir string) error {
 //	islink PATH TARGET        fail unless PATH is a symlink whose target is TARGET
 //	store SUB ...             drive the store through its API (see storeCmd)
 //	onejson                   fail unless the last stdout is one JSON object with "schema": 1
+//	releases SPEC...          serve fake releases at NESS_RELEASES_URL (see releasesCmd)
+//	lock PATH                 hold a flock on PATH until the script ends
+//	upgradefixture latest|vX.Y.Z  unpack and commit a release fixture into $WORK/repo, load its
+//	                          store unmigrated; sets FIXTURE_VERSION and FIXTURE_SCHEMA
+//	patchrule                 fail if this release is a patch over the fixture adding a migration
 func Cmds() map[string]func(ts *testscript.TestScript, neg bool, args []string) {
 	return map[string]func(ts *testscript.TestScript, neg bool, args []string){
-		"exits":    exits,
-		"snap":     snap,
-		"samesnap": samesnap,
-		"islink":   islink,
-		"store":    storeCmd,
-		"fake":     fakeCmd,
-		"onejson":  onejson,
+		"exits":          exits,
+		"snap":           snap,
+		"samesnap":       samesnap,
+		"islink":         islink,
+		"store":          storeCmd,
+		"fake":           fakeCmd,
+		"onejson":        onejson,
+		"releases":       releasesCmd,
+		"lock":           lockCmd,
+		"upgradefixture": upgradeFixture,
+		"patchrule":      patchRule,
 	}
 }
 

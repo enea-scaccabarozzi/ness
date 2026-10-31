@@ -20,7 +20,8 @@ stated otherwise.
   and no other file outside the repository.
   Verify: testscript — `$HOME` diff after install is exactly that file.
 - **R-WRK-003** The installed unit MUST run the binary by its absolute path (the one resolved at
-  install time), not via `PATH` lookup (§16 #3).
+  install time), not via `PATH` lookup (§16 #3), re-pointed by `ness upgrade` and
+  `ness self-update` when the installed path changes (R-UPD-048, R-UPD-062).
   Verify: testscript — `ExecStart=` starts with `/` and equals the resolved binary path.
 - **R-WRK-004** `ness worker install` MUST refuse when no systemd user session is available.
   Verify: testscript — fake `systemctl --user` failing; exit non-zero; no unit file written.
@@ -35,6 +36,7 @@ stated otherwise.
   Verify: unit — after a pass the heartbeat time equals the fake clock and version the binary's.
 - **R-WRK-009** The worker MUST re-resolve its binary path every 60 s and, when the resolved
   binary's version differs from its own, log one restart line and exit 0 so systemd restarts it.
+  A self-update writes at the same path, so this check picks the new binary up.
   Verify: unit (synctest) — fake resolver reports a new version at t=61 s → the run loop returns
   exit 0 by t=120 s; log has one restart line; same version → keeps running.
 

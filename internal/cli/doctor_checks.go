@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -25,18 +24,49 @@ import (
 
 // checkBinary: the running binary against the project pin, with its path (R-DOC-004).
 func checkBinary(e *doctorEnv) check {
-	pin := e.p.file.Pin()
-	detail := fmt.Sprintf("%s at %s, pin %s", e.d.Version, executable(), pin)
+	pin := e.p.pin()
+	detail := fmt.Sprintf("%s at %s, pin %s", e.d.Version, e.d.Executable, pin)
 	if err := config.CheckPin(pin, e.d.Version); err != nil {
-		return fail("binary", detail+": "+err.Error(),
-			"install ness "+pin+".x (mise use ness@"+pin+") or change the pin in .ness/ness.toml")
+		fix := "set a valid ness = \"<major>.<minor>\" pin in " + config.Path
+		if pe := (*config.PinError)(nil); errors.As(err, &pe) {
+			fix = pe.Fix()
+		}
+		return fail("binary", detail+": "+err.Error(), fix)
 	}
 	return ok("binary", detail)
 }
 
+// checkStore: the store schema against the binary's. A newer store fails with self-update and,
+// when the copy taken before this binary's schema was left exists, the rollback (R-UPD-012).
+func checkStore(e *doctorEnv) check {
+	var se *store.SchemaError
+	switch {
+	case errors.Is(e.storeErr, fs.ErrNotExist):
+		return ok("store", "no store yet")
+	case errors.As(e.storeErr, &se) && errors.Is(se, store.ErrNewer):
+		fix := "ness self-update"
+		bak := store.BackupPath(e.storePath, se.Binary)
+		if _, err := os.Stat(bak); err == nil {
+			// The worker is stopped and the -wal dropped first: SQLite would replay a leftover
+			// -wal of the newer store onto the restored copy.
+			unit := systemd.UnitName(e.cfg.Project)
+			fix += fmt.Sprintf("; or roll back (loses what the newer ness wrote since): "+
+				"systemctl --user stop %s; rm -f %s-wal %s-shm; cp %s %s; systemctl --user start %s",
+				unit, e.storePath, e.storePath, bak, e.storePath, unit)
+		}
+		detail := fmt.Sprintf("store schema %d, binary schema %d (written by a newer ness)", se.Store, se.Binary)
+		return fail("store", detail, fix)
+	case errors.Is(e.storeErr, store.ErrOlder):
+		return warn("store", e.storeErr.Error(), "")
+	case e.storeErr != nil:
+		return fail("store", e.storeErr.Error(), "")
+	}
+	return ok("store", fmt.Sprintf("schema %d", store.Version()))
+}
+
 // checkHooksBinary: the ness the client hooks resolve through PATH (R-DOC-005).
-func checkHooksBinary(_ *doctorEnv) check {
-	me := realPath(executable())
+func checkHooksBinary(e *doctorEnv) check {
+	me := realPath(e.d.Executable)
 	found, err := exec.LookPath("ness")
 	if err != nil {
 		return fail("hooks-binary", "ness is not on PATH; the client hooks resolve nothing", "put "+me+" on PATH")
@@ -49,33 +79,20 @@ func checkHooksBinary(_ *doctorEnv) check {
 
 // checkWorkerBinary: the worker unit's ExecStart against this binary (R-DOC-005, §16 #3).
 func checkWorkerBinary(e *doctorEnv) check {
-	unit := unitPath(e.cfg.Project)
-	f, err := os.Open(unit) //nolint:gosec // the unit of this project
-	if err != nil {
+	sup := systemd.Supervisor{Home: userHome()}
+	prog, err := sup.ExecBinary(e.cfg.Project)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		unit := sup.UnitPath(e.cfg.Project)
 		return warn("worker-binary", "no unit at "+unit+" (worker not installed)", "ness worker install")
+	case err != nil:
+		return fail("worker-binary", err.Error(), "ness worker install")
 	}
-	defer func() { _ = f.Close() }() //nolint:errcheck // read-only file
-	me := realPath(executable())
-	sc := bufio.NewScanner(f)
-	for sc.Scan() {
-		start, found := strings.CutPrefix(sc.Text(), "ExecStart=")
-		if !found {
-			continue
-		}
-		prog := systemd.FirstWord(start)
-		if prog == "" {
-			break
-		}
-		if realPath(prog) != me {
-			return fail("worker-binary", "unit ExecStart runs "+prog+", this binary is "+me, "ness worker install")
-		}
-		return ok("worker-binary", "unit runs "+prog)
+	me := realPath(e.d.Executable)
+	if realPath(prog) != me {
+		return fail("worker-binary", "unit ExecStart runs "+prog+", this binary is "+me, "ness worker install")
 	}
-	return fail("worker-binary", "unit "+unit+" has no ExecStart", "ness worker install")
-}
-
-func unitPath(project string) string {
-	return systemd.Supervisor{Home: userHome()}.UnitPath(project)
+	return ok("worker-binary", "unit runs "+prog)
 }
 
 func realPath(p string) string {

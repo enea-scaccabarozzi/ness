@@ -32,7 +32,6 @@ func TestGoreleaserBuildsStaticLinuxBinaries(t *testing.T) {
 		"- linux", "mode: keep-existing")
 	ci := read(t, ".github/workflows/ci.yml")
 	wantAll(t, "ci.yml", ci, "goreleaser check", "goreleaser build --snapshot", "statically linked")
-	wantAll(t, "release.yml", read(t, ".github/workflows/release.yml"), "tags:", "goreleaser release --clean")
 }
 
 func TestTheGateRunsEveryStep(t *testing.T) {
@@ -64,15 +63,19 @@ func TestReleasePleaseHasRunningSessions(t *testing.T) {
 	wantAll(t, ".release-please-manifest.json", read(t, ".release-please-manifest.json"), `"."`)
 	wantAll(t, "release-please.yml", read(t, ".github/workflows/release-please.yml"),
 		"googleapis/release-please-action", "workflow_dispatch:", "steps.rp.outputs.release_created",
-		"go test ./internal/sync/", "goreleaser release --clean", "fetch-depth: 0", `grep -Eq '^sessions`)
+		"go test ./internal/sync/", "goreleaser release --clean", "fetch-depth: 0", "release-check.sh stable")
 	rp := read(t, ".github/workflows/release-please.yml")
-	if strings.Index(rp, `grep -Eq '^sessions`) > strings.Index(rp, "googleapis/release-please-action") {
-		t.Error("the sessions check must run before release-please")
+	if strings.Index(rp, "release-check.sh stable") > strings.Index(rp, "googleapis/release-please-action") {
+		t.Error("the release check must run before release-please")
 	}
-	// Every push to main updates the release pull request; only its merge must carry a sessions
-	// commit, so the check is conditioned on the release commit.
+	// release-please releases any merged pull request still labelled autorelease: pending, on
+	// any later push or dispatch and whatever the merge method, so the check keys on that label
+	// at each such merge commit, never on the head commit message.
 	wantAll(t, "release-please.yml", rp, "push:\n    branches: [main]",
-		"startsWith(github.event.head_commit.message, 'chore(main): release')")
+		"gh pr list --state merged --label 'autorelease: pending'", `git checkout -q --detach "$sha"`)
+	if strings.Contains(rp, "head_commit") {
+		t.Error("release-please.yml must not gate the release check on the head commit")
+	}
 }
 
 func TestMutationTestingIsWeeklyAndReportOnly(t *testing.T) {
@@ -84,7 +87,7 @@ func TestMutationTestingIsWeeklyAndReportOnly(t *testing.T) {
 
 func TestWorkflowsArePinnedAndLeastPrivilege(t *testing.T) {
 	sha := regexp.MustCompile(`uses: [\w./-]+@[0-9a-f]{40} # v\d+\.\d+\.\d+`)
-	for _, f := range []string{"ci", "mutation", "release", "release-please"} {
+	for _, f := range []string{"ci", "mutation", "rc", "release-please"} {
 		text := read(t, ".github/workflows/"+f+".yml")
 		for _, l := range strings.Split(text, "\n") {
 			if strings.Contains(l, "uses:") && !sha.MatchString(l) {
@@ -92,7 +95,7 @@ func TestWorkflowsArePinnedAndLeastPrivilege(t *testing.T) {
 			}
 		}
 	}
-	for _, f := range []string{"ci", "mutation"} {
+	for _, f := range []string{"ci", "mutation", "rc"} {
 		wantAll(t, f+".yml", read(t, ".github/workflows/"+f+".yml"), "permissions:\n  contents: read")
 	}
 	wantAll(t, "mutation.yml", read(t, ".github/workflows/mutation.yml"), "timeout-minutes:")

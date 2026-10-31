@@ -113,15 +113,25 @@ func TestBetweenSortsAndOrdersPrereleases(t *testing.T) {
 	if len(got) != 3 || got[0].Version != "0.1.0" || got[1].Version != "0.2.0" || got[2].Version != "0.3.0" {
 		t.Fatalf("out-of-order file must print sorted: %+v", got)
 	}
-	if got = between(t, notes, "0.1.0", "0.2.0-rc.1"); len(got) != 0 {
-		t.Fatalf("an rc is below its release: %+v", got)
-	}
-	if got = between(t, notes, "0.2.0-rc.1", "0.2.0"); len(got) != 1 || got[0].Version != "0.2.0" {
-		t.Fatalf("rc to release prints the release: %+v", got)
-	}
 	for _, bad := range [][2]string{{"dev", "0.2.0"}, {"0.1.0", "latest"}} {
 		if _, err = nsync.Between(notes, bad[0], bad[1]); err == nil {
 			t.Fatalf("Between(%v) must be an error", bad)
 		}
+	}
+}
+
+func TestBetweenRC(t *testing.T) {
+	// covers: R-SYNC-032, R-SYNC-033
+	notes := []nsync.Note{{Version: "0.2.0", Body: "a\n### Running sessions\n* merge\n"}, {Version: "0.1.0", Body: "### Running sessions\n* none\n"}}
+	got, err := nsync.Between(notes, "0.1.0", "0.2.0-rc.1")
+	if err != nil || len(got) != 1 || got[0].Version != "0.2.0" {
+		t.Fatalf("0.1.0 → rc.1 = %v, %v, want [0.2.0]", got, err)
+	}
+	got, err = nsync.Between(notes, "0.2.0-rc.1", "0.2.0")
+	if err != nil || len(got) != 0 {
+		t.Fatalf("rc.1 → 0.2.0 = %v, %v, want none", got, err)
+	}
+	if s := nsync.RunningSessions(notes[0]); s != "* merge" {
+		t.Fatalf("RunningSessions = %q", s)
 	}
 }

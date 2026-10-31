@@ -1,0 +1,165 @@
+# ness self-update resolves the target on the channel (flag, else the project's [update] channel,
+# else stable), --check only reports and writes the cache from one fetch, a bad checksum writes
+# nothing, an install keeps the old binary as .prev, and every registered worker unit running
+# another binary is re-pointed and restarted.
+# covers: R-UPD-040, R-UPD-041, R-UPD-042, R-UPD-043, R-UPD-047, R-UPD-048, R-CFG-053
+mkdir $WORK/bin
+cp stub $WORK/bin/ness
+chmod 755 $WORK/bin/ness
+env NESS_TEST_EXECUTABLE=$WORK/bin/ness
+releases 0.2.0 0.3.0-rc.1:pre
+
+# --check outside any project (R-CFG-053: self-update runs there, on the stable channel).
+# rejects: --check that installs, or that offers the rc to a stable channel
+exec ness self-update --check
+stdout '^ness 0\.2\.0 available \(installed 0\.1\.0\): ness self-update$'
+! stdout '0\.3\.0'
+cmp $WORK/bin/ness stub
+exec $WORK/bin/ness --version
+stdout 'ness version 0\.1\.0'
+! exists $WORK/bin/ness.prev
+exec ls $WORK/bin
+cmp stdout ls-ness.txt
+# rejects: a cache written with only the channel asked for, or not written at all
+exists $HOME/.cache/ness/update.json
+grep '"stable": ?"0\.2\.0"' $HOME/.cache/ness/update.json
+grep '"rc": ?"0\.3\.0-rc\.1"' $HOME/.cache/ness/update.json
+# rejects: a second fetch of the release list (one for the cache, one for the answer)
+grep -count=1 '^GET /releases(\?\S*)?( HTTP/\S+)?$' $WORK/releases.log
+# rejects: a --check --channel rc whose fix installs stable
+exec ness self-update --check --channel rc
+stdout '^ness 0\.3\.0-rc\.1 available \(installed 0\.1\.0\): ness self-update --channel rc$'
+cmp $WORK/bin/ness stub
+
+# A checksum mismatch refuses and writes nothing: the binary is byte-identical, no file appears.
+# rejects: an install that skips Verify, or writes a temp file before verifying and leaves it
+releases 0.2.0:badsum
+exits 4 ness self-update
+stderr 'checksum mismatch'
+cmp $WORK/bin/ness stub
+exec ls $WORK/bin
+cmp stdout ls-ness.txt
+
+# Stable install: the new binary is in place and the old one is kept as .prev.
+# rejects: an install that renames without keeping .prev, or that installs the rc on stable
+releases 0.2.0 0.3.0-rc.1:pre
+exec ness self-update
+stdout '^ness 0\.2\.0 installed at .*/bin/ness \(previous kept at .*/bin/ness\.prev\); workers pick it up within a minute$'
+exec $WORK/bin/ness --version
+stdout 'ness version 0\.2\.0'
+grep 0.1.0 $WORK/bin/ness.prev
+exec ls $WORK/bin
+cmp stdout ls-prev.txt
+
+# rejects: --channel ignored
+cp stub $WORK/bin/ness
+chmod 755 $WORK/bin/ness
+exec ness self-update --channel rc
+stdout '^ness 0\.3\.0-rc\.1 installed at '
+exec $WORK/bin/ness --version
+stdout 'ness version 0\.3\.0-rc\.1'
+
+# Inside a project with [update] channel = "rc" and no flag: the rc.
+# rejects: a channel that ignores the project's [update] channel
+exec git init -q -b main $WORK/rcproj
+exec git -C $WORK/rcproj commit -q --allow-empty -m init
+mkdir $WORK/rcproj/.ness
+cp rc.toml $WORK/rcproj/.ness/ness.toml
+cd $WORK/rcproj
+cp $WORK/stub $WORK/bin/ness
+chmod 755 $WORK/bin/ness
+exec ness self-update
+stdout '^ness 0\.3\.0-rc\.1 installed at '
+exec $WORK/bin/ness --version
+stdout 'ness version 0\.3\.0-rc\.1'
+
+# rejects: the project's channel winning over the flag
+cp $WORK/stub $WORK/bin/ness
+chmod 755 $WORK/bin/ness
+exec ness self-update --channel stable
+stdout '^ness 0\.2\.0 installed at '
+exec $WORK/bin/ness --version
+stdout 'ness version 0\.2\.0'
+
+# The same project pinned at a version this binary cannot run: self-update skips the pin check.
+# rejects: self-update refused by R-CFG-011, or falling back to stable when the pin is foreign
+cp $WORK/rc-pin09.toml .ness/ness.toml
+cp $WORK/stub $WORK/bin/ness
+chmod 755 $WORK/bin/ness
+exec ness self-update
+stdout '^ness 0\.3\.0-rc\.1 installed at '
+exec $WORK/bin/ness --version
+stdout 'ness version 0\.3\.0-rc\.1'
+cd $WORK
+
+# Only the installed version released: nothing to do, also with --check.
+# rejects: reinstalling the running version, or a --check that says "available" for it
+releases 0.1.0
+cp stub $WORK/bin/ness
+chmod 755 $WORK/bin/ness
+exec ness self-update
+stdout '^ness 0\.1\.0 is the latest on channel stable$'
+cmp $WORK/bin/ness stub
+exec ness self-update --check
+stdout '^ness 0\.1\.0 is the latest on channel stable$'
+! stdout 'available'
+cmp $WORK/bin/ness stub
+
+# A registered project whose worker unit runs /old/ness: the install re-points it.
+cd $WORK/repo
+exec ness init --gate true --base main --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+fake output 'systemctl --user daemon-reload' ''
+fake output 'systemctl --user enable --now ness-repo' ''
+fake output 'systemctl --user restart ness-repo' ''
+exec ness worker install
+exec sh -c 'sed -i "s#^ExecStart=.*#ExecStart=\"/old/ness\" worker run#" $HOME/.config/systemd/user/ness-repo.service'
+grep '^ExecStart="/old/ness" worker run$' $HOME/.config/systemd/user/ness-repo.service
+fake calls 'systemctl --user daemon-reload' 1
+cd $WORK
+releases 0.2.0
+cp stub $WORK/bin/ness
+chmod 755 $WORK/bin/ness
+# rejects: an install that leaves registered workers on the old binary
+exec ness self-update
+stdout '^ness 0\.2\.0 installed at '
+! grep '/old/ness' $HOME/.config/systemd/user/ness-repo.service
+exec sh -c 'U=$HOME/.config/systemd/user/ness-repo.service; grep -qxF "ExecStart=\"$WORK/bin/ness\" worker run" $U || grep -qxF "ExecStart=\"$(readlink -f $WORK/bin/ness)\" worker run" $U'
+fake calls 'systemctl --user daemon-reload' 2
+fake calls 'systemctl --user restart ness-repo' 1
+cp $HOME/.config/systemd/user/ness-repo.service $WORK/unit-after
+
+# rejects: rewriting and restarting a unit that already names the installed binary
+cp stub $WORK/bin/ness
+chmod 755 $WORK/bin/ness
+exec ness self-update --version 0.2.0
+stdout '^ness 0\.2\.0 installed at '
+cmp $HOME/.config/systemd/user/ness-repo.service $WORK/unit-after
+fake calls 'systemctl --user daemon-reload' 2
+fake calls 'systemctl --user restart ness-repo' 1
+
+-- stub --
+#!/bin/sh
+echo ness version 0.1.0
+-- ls-ness.txt --
+ness
+-- ls-prev.txt --
+ness
+ness.prev
+-- rc.toml --
+ness = "0.1"
+project = "rcproj"
+base = "main"
+gate = "true"
+
+[update]
+channel = "rc"
+-- rc-pin09.toml --
+ness = "0.9"
+project = "rcproj"
+base = "main"
+gate = "true"
+
+[update]
+channel = "rc"

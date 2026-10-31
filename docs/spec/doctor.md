@@ -6,10 +6,13 @@
 cli `doctor` over `internal/session` checks, `internal/sync`, `internal/store`. Sources: §4, §5
 (`ness doctor`), §8 (paused probes), §12 (Codex ids), §16 (#3), D8, D14.
 
-- **R-DOC-001** `ness doctor` MUST be read-only: it MUST NOT modify any file, store row, git ref,
-  worktree or runtime tab.
+- **R-DOC-001** `ness doctor` MUST be read-only: it MUST NOT modify any file except the
+  update-check cache `$XDG_CACHE_HOME/ness/update.json` (R-UPD-050), nor any store row, git ref,
+  worktree or runtime tab. An empty cache directory is an error, never a write into the
+  repository.
   Verify: testscript — tree hash, `git for-each-ref`, store dump and fake herdr state equal
-  before and after, with every check failing.
+  before and after, with every check failing; outside the repository only
+  `$XDG_CACHE_HOME/ness/update.json` may change.
 - **R-DOC-002** For every failed check doctor MUST print a fix command and MUST NOT run it.
   Verify: testscript — each failing check's output line contains a command; the command's effect
   is absent afterwards.

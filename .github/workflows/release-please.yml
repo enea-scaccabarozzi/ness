@@ -1,6 +1,6 @@
 # release-please keeps a release pull request open from the commits on main; merging it tags the
 # release. The tag release-please creates with GITHUB_TOKEN triggers no workflow, so the build
-# runs here, after the Running sessions notes test.
+# of stable tags runs here, after the Running sessions notes test; rc tags build in rc.yml.
 name: release-please
 on:
   push:
@@ -18,16 +18,18 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
-      - name: Require a sessions commit
-        # Only the merge of a release pull request cuts a release; every other push only updates it.
-        if: "${{ startsWith(github.event.head_commit.message, 'chore(main): release') }}"
+      - name: Require an rc of this tree, the upgrade fixture and a sessions commit
+        # release-please releases every merged pull request still labelled autorelease: pending,
+        # whatever the merge method and on any later push or dispatch, so each one is checked at
+        # its merge commit before release-please runs.
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          last=$(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD)
-          # %B: a squash lists the folded subjects as nested commits in its body (D44).
-          git log --format=%B "$last..HEAD" | grep -Eq '^sessions(\(|!|:)' || {
-            echo "no sessions: commit since $last; add one (e.g. 'sessions: nothing to do') before releasing"
-            exit 1
-          }
+          shas=$(gh pr list --state merged --label 'autorelease: pending' --json mergeCommit --jq '.[].mergeCommit.oid')
+          for sha in $shas; do
+            git checkout -q --detach "$sha"
+            sh .github/scripts/release-check.sh stable "$(jq -r '."."' .release-please-manifest.json)"
+          done
       - uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4.4.1
         id: rp
         with:

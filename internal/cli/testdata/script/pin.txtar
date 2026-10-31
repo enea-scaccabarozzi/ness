@@ -1,31 +1,49 @@
-# The binary refuses to run outside the project's pin, naming the range, its version and its path.
+# A 0.N binary runs a 0.N or 0.(N-1) pin and refuses any other, naming the range, its version,
+# its path and the one fix for the direction of the skew; doctor and --version skip the check.
+# A major >= 1 pin runs the same major at the pinned minor or later.
 # covers: R-CFG-011, R-CFG-012, R-CFG-013
 cd repo
 env NESS_TEST_VERSION=0.3.0
-exits 1 ness sync --check
+exec ness init --gate true --base main --yes
+grep '^ness = "0.3"$' .ness/ness.toml
+exec ness status
 env NESS_TEST_VERSION=0.3.7
-exits 1 ness sync --check
+exec ness status
+# rejects: today's same-minor-only pin check (0.4.0 must run a 0.3 pin)
+env NESS_TEST_VERSION=0.4.0
+exec ness status
+# rejects: a check that accepts any older or any newer minor
+# rejects: a refusal without the widened range, the version, the path, or a fix
 env NESS_TEST_VERSION=0.2.9
-exits 4 ness sync --check
-stderr 'pins ness 0\.3\.x'
+exits 4 ness status
+stderr 'pins ness 0\.3\.x or 0\.4\.x .*; fix: ness self-update$'
 stderr '0\.2\.9'
 stderr 'binary: /'
-env NESS_TEST_VERSION=0.4.0
-exits 4 ness sync --check
+# rejects: one fix text for both directions (older binary vs. pin two minors behind)
+env NESS_TEST_VERSION=0.5.0
+exits 4 ness status
+stderr 'pins ness 0\.3\.x or 0\.4\.x'
+stderr 'fix: run ness upgrade in the base checkout; open sessions then merge their base$'
+! stderr 'self-update'
+# rejects: doctor or --version gated by the pin
+exits 1 ness doctor
+stdout '^fail\tbinary\t'
+stdout '^fail\tbinary\t.*\tfix: run ness upgrade in the base checkout; open sessions then merge their base$'
+exec ness --version
+stdout '0\.5\.0'
 
 cp ../one.toml .ness/ness.toml
 env NESS_TEST_VERSION=1.5.1
 exits 1 ness sync --check
+# rejects: the 0.x minor+1 window applied to major >= 1 pins (2.0.0 is not 1.(2+1))
 env NESS_TEST_VERSION=2.0.0
 exits 4 ness sync --check
 env NESS_TEST_VERSION=1.1.9
 exits 4 ness sync --check
+stderr 'fix: ness self-update$'
+exits 1 ness doctor
+stdout '^fail\tbinary\t'
 
--- repo/.ness/ness.toml --
-ness = "0.3"
-project = "p"
-base = "main"
-gate = "true"
 -- one.toml --
 ness = "1.2"
 project = "p"

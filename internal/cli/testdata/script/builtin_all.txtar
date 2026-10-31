@@ -11,5 +11,5 @@ exec sh -c 'ls -d .agents/skills/ness-* | wc -l'
 stdout '^15$'
 exits 1 ness doctor
 stdout '^ok\tskill-shadowing\t'
-exec sh -c 'ness --help | sed -n "/^Available Commands:/,/^$/p" | grep -E "^  [a-z]+ " | awk "{print \$1}" | sort | tr "\n" " "'
-stdout '^close contract doctor hook inbox init integrate open pick post probe reply secret send size stats status sync worker $'
+exec sh -c 'ness --help | sed -n "/^Available Commands:/,/^$/p" | grep -E "^  [a-z-]+ " | awk "{print \$1}" | sort | tr "\n" " "'
+stdout '^close contract doctor hook inbox init integrate open pick post probe reply secret self-update send size stats status sync upgrade worker $'

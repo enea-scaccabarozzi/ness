@@ -1,13 +1,15 @@
 # Sync writes exactly the planned paths and the lock, nothing outside the repository, no feature
 # text unless enabled, and ignores per-user config trees.
-# covers: R-SYNC-003, R-SYNC-006, R-SYNC-072, R-CFG-001, R-CFG-006
+# covers: R-SYNC-003, R-SYNC-006, R-SYNC-072, R-UPD-031, R-CFG-001, R-CFG-006
 cd repo
-mkdir $HOME/.config/ness $WORK/xdg/ness
+mkdir $HOME/.config/ness
 cp ../evil.toml $HOME/.config/ness/ness.toml
-cp ../evil.toml $WORK/xdg/ness/ness.toml
-env XDG_CONFIG_HOME=$WORK/xdg
 snap home $HOME
 exec ness sync
+# the machine registry is the one allowed write outside the repository
+# rejects: a sync that records nowhere, or writes any other file under $HOME
+exists $HOME/.config/ness/projects
+rm $HOME/.config/ness/projects
 samesnap home $HOME
 exec git status --porcelain --untracked-files=all
 cmp stdout ../status.txt

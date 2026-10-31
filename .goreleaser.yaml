@@ -1,5 +1,6 @@
 # ness releases: static Linux binaries (R-QA-004). release-please cuts the tag and the GitHub
-# release; the release workflow runs goreleaser on the tag and attaches the archives.
+# release; release-please.yml runs goreleaser on stable tags and rc.yml on -rc.N tags, which
+# prerelease: auto publishes as GitHub pre-releases.
 version: 2
 project_name: ness
 builds:
@@ -26,3 +27,4 @@ changelog:
   disable: true
 release:
   mode: keep-existing
+  prerelease: auto

@@ -1,0 +1,673 @@
+symlink .claude/skills ../.agents/skills
+symlink CLAUDE.md AGENTS.md
+-- .agents/skills/ness-entry/SKILL.md --
+---
+name: ness-entry
+description: Start here in a ness project. Covers who you are in the session tree, the work sizes, the session record, how to communicate and wait, and when to stop and ask.
+---
+
+# ness entry
+
+You are one session in a tree of accountable sessions. Your brief names your scope, your
+manager, and the result you owe. The operator is the human; your manager is the session one
+level up, or the operator when you are a root.
+
+## Work sizes
+The size is chosen once, by the conversation that starts the work, from the ask. A size removes
+steps and never adds a mode. The session-start line carries your size (`size quick`); read the
+section of that name below and skip the other size's. Closing applies to every size. A child has no
+size: see Child.
+- **answer**: reply in chat, with no session record.
+- **quick task** (size `quick`): one deliverable, no children, one sitting: one branch, a few
+  commits, and a short report.
+- **full session** (size `full`): anything else: a brief, plan, decisions and report under the
+  session directory, and children when ness-launch says so.
+- **program** (size `program`): a root that owns a map (`docs/program/roadmap.md`), opens children in waves and releases; load the `ness-program` skill.
+
+A size is a starting point. When grounding proves it wrong, change it: `ness size full` when a
+quick task grew, `ness size quick` when a full one shrank and no child is open.
+
+## Not in a session yet
+The session-start hook says so when this conversation is not a ness session. The operator never
+has to type a ness command to start one:
+- An answer needs no session: answer.
+- A quick task or a full session needs one. Pick the size: `quick` for one deliverable, no
+  children, one sitting; `full` for anything else. When the operator asked you to start the work,
+  promote now; otherwise propose it in one line ("This needs a session: scope `x`, tier
+  `standard`, size `quick`. Start it?") and promote on yes.
+- To promote, write the operator's request verbatim to a brief file outside the repository, pick
+  a scope (`[a-z][a-z0-9-]{0,31}`), the tier for the job and a size from the list above (left
+  out, the last one listed), and run
+  `ness open --root --here --scope SCOPE --tier TIER --size SIZE --brief FILE`. It makes the
+  root's branch and worktree and prints the worktree path: from then on work there (`cd` into it,
+  edit files under it), never in the checkout you started in.
+- When `--here` is refused (no herdr pane, or a Codex conversation), run the same command
+  without `--here`: it opens the root in its own tab and worktree. Tell the operator which tab,
+  and stop here.
+- Then continue as the root, following this skill.
+
+## Communicate
+- `ness inbox` lists what is addressed to you; `ness inbox --unread` (or `--show A B C`) reads
+  them in full in one call. `ness send` and `ness reply` are the only way to reach another
+  session or the operator. The worker wakes a session when something arrives.
+  Work you cannot do goes back with `--as returned`; your own item that no longer holds you
+  settle with `--as withdrawn`.
+- Waiting rule: to wait for a reply or a child, pull the inbox once, then end your turn. Never
+  poll: no Monitor, no cron, no ScheduleWakeup, no sleep loops around `ness inbox` or
+  `ness status`. The pre-tool hook refuses them. Waiting on a date rather than an item (a probe
+  window, "integrate after Friday"): `ness inbox --boundary NOTE --until TIME`; the worker leaves
+  you alone until then.
+- Background work: never end a command with a lone `&` and never wait with `pgrep -f`; start
+  the command with `run_in_background` and end your turn, the harness wakes you when it exits.
+- Read a saved tool result with offset and limit, or grep it; never read the whole file back, the
+  pre-tool hook refuses a whole-file read of a tool result.
+- Messages to the operator are decision-first and short: the decision or the question in the
+  first line, the reasons after. Long content goes to a page the operator opens, not the chat.
+- A root reports progress to the operator in its chat, and files the same text as a `checkpoint`
+  so the phone points the operator to it: `ness send --to operator --intent checkpoint
+  --body @FILE [--page URL]`: the body has `## Done`, `## Now` and `## Next` (add `## Ask` to ask
+  something). When one is due depends on the size (Quick root, Full session). Children's
+  handoffs use the same three headings.
+- Subagents write their results to a file and return the path plus a summary of at most about
+  2k tokens (about 8,000 characters). For searches use the `ness-sweep` subagent, never
+  Explore: Explore runs on the main model.
+
+## Ask the operator
+The operator works with sessions in their chat, and only there. They never open `ness inbox`, and
+they never answer on the phone. The phone is a notification: it points the operator to a session
+that needs them.
+- Ask the operator only for what your manager cannot settle: a decision the operator keeps
+  (reserved decisions, below), a fact only the operator has, an action only the operator can take.
+  A child asks its manager.
+- Write the ask in full in your chat: the question first, the facts needed to answer it, the
+  options with your recommendation, and what happens meanwhile, for an operator who has read nothing.
+- Then file the same question with `ness send --to operator` (first line the question). The item
+  is the harness's record, not a second conversation: it sends the phone notification, tells the
+  worker you wait on the operator, and keeps the trail. Your manager gets a copy automatically.
+- The operator answers in your chat. Record the answer on the item:
+  `ness reply ITEM --body "their answer"`. An item left open says you are still waiting.
+
+## Autonomy
+Your brief states your autonomy level, set from the operator's words; "me" in those words is the
+operator, whoever relays them.
+- **plan first**: write the plan and stop; the work starts when the operator approves it.
+- **report, then act**: before each step the brief did not spell out, send what you are about to
+  do, then do it without waiting.
+- **act within the brief**: do the work; ask only for what is outside the brief or reserved.
+When your brief states no level, use this project's default:
+**act within the brief**.
+A root never lowers the level the operator's words set for a child. A plan the operator approved in advance skips
+its checkpoints until the work leaves its scope.
+
+## Tests
+While you work, run the tests of the packages you touch. The full gate runs once, inside
+`ness integrate`, under the project's gate lock: never run it by hand next to other sessions.
+
+## Model and effort
+Your model and effort never change mid-session. The project's ladder runs cheapest to strongest
+around a base rung; `ness pick` prints it. Do routine work at your own rung and give the rare
+hard step to a subagent at a higher rung: start every subagent prompt with `kind: <name>`
+(search, run, implement, debug, research, review, verify, design) and pass the model and effort
+`ness pick --kind <name>` gives. Named agents (ness-sweep, ness-review, ness-verify,
+ness-design) carry their own. To go one rung above the recommendation, add a line
+`escalate: <reason>`; the hook refuses anything higher and records every call. When your own
+session needs more, write your state down (`ness inbox --boundary NOTE`), end your turn, and
+let your manager resume you with `--tier up`.
+
+## Lessons
+- Append what you learned under `## Lessons` in your report at handoff; read your
+  manager's lessons at entry.
+
+## Briefs
+- A brief does not promote side remarks to rules: only what it states as a requirement binds.
+- A root delegates anything over a few edits (to a subagent by default, to a child only when
+  ness-launch says so) and keeps the map.
+
+## Stop and ask
+Stop and ask your manager before anything you cannot undo.
+
+## Reserved decisions
+Decisions the operator keeps; everything else is yours within your brief. Raise one as a
+`decision` item with the options and your recommendation.
+- irreversible actions
+- money
+- accounts and credentials
+- publishing outside the repository
+- policy changes
+- scope beyond the brief
+- non-trivial product decisions (what users see, or what the product does or promises), and any
+  product call a test, a contract or a frozen file would lock in
+A trivial product call is yours to make: mark it PROVISIONAL in your handoff or report, so the root
+can list it for the operator.
+
+## Closing
+Every size ends the same way. `report.md` (what you delivered, with the evidence) carries a
+`## Lessons` heading (`None.` when there are none); `ness close` refuses a report without it. A
+root closes itself only after the operator said so in the chat:
+`ness close <your id> --authorized "<the operator's words>"`. The close checks that the operator
+typed those words and refuses otherwise; ask them first. Your tab stays open after the close.
+
+## Quick root
+A root of size `quick` keeps its worktree, `brief.md` verbatim, a `report.md` of 10 to 30 lines
+with the evidence, one `ness integrate` through the gate, and one checkpoint at the end
+(`## Done`, `## Now`, `## Next`), which is the operator's completion signal. It writes no `specs.md`, `plan.md` or
+`decisions.md`, loads no lifecycle skill and not ness-launch, and opens no
+child: `ness open` refuses. Delegate to subagents; when the work outgrew one sitting, run
+`ness size full` first and follow Full session.
+
+Once integrated, the root shows as `done` and the worker stops asking for your move. Say so in
+the final message ("integrated; `close it` when you like, leaving it open is fine"). It still
+closes only with the operator's words (Closing, above).
+
+## Full session
+A root of size `full`, or of a size a profile added, keeps the record below, sends a checkpoint
+at the end of each task (a program root at each landing), follows the lifecycle, and may open
+children: load ness-launch before the first one.
+
+### Session record
+A full session keeps its record under `<sessions>/<root>/[<child>/]` (`sessions` in
+`.ness/ness.toml`, default `docs/sessions`): `brief.md` (what you were asked, verbatim),
+`specs.md` (what you agreed to build), `plan.md` (the steps), `decisions.md` (append-only, one
+stable id per entry) and `report.md` (what you delivered, with the evidence).
+
+Decision ids are the root's: only the root mints them. A child's `decisions.md` is plain dated
+notes without ids, and those notes are never cited upward; a child's decision that matters goes
+to its manager in the handoff.
+
+### Lifecycle
+- At specify, before any design:
+- At plan, before the first commit:
+- At handoff, before the report:
+
+## Child
+A child has no size: it is the one child shape, sized by its brief. It keeps its record under its
+manager's, asks its manager and not the operator, writes the handoff with `## Done`, `## Now` and
+`## Next`, and appends its lessons at handoff.
+
+## After compaction
+Re-read your brief and your inbox before continuing.
+- Operator communication: decision-first and short, long content on a page; the operator reads only your chat, never `ness inbox` and never answers on the phone: write every ask and report in full in the chat, then file it with `ness send --to operator` so the phone points them to you; a child asks only for what its manager cannot settle.
+- Autonomy: act at the level your brief states; a root never lowers a child's level; reserved decisions stay the operator's.
+- Models: every subagent call carries a `kind: <name>` line and the model and effort `ness pick` gives; the hook refuses a rung above the recommendation unless the prompt has `escalate: <reason>` (one rung).
+- Re-read `docs/program/roadmap.md` (Autonomy, program doctrine), `docs/doctrine.md` and the last decision id in `docs/program/decisions.md`.
+-- .agents/skills/ness-launch/SKILL.md --
+---
+name: ness-launch
+description: How a manager opens, briefs, waits for and closes child sessions, and which tier each job gets.
+---
+
+# ness launch
+
+## Open a child
+`ness open --scope NAME --tier TIER --brief FILE [--title T] [--effort E] [--client claude|codex]`
+opens a worktree, a branch and a tab for the child and hands it your brief. Only the operator
+opens a root (`--root`). Write the brief first: the question, the result owed, the limits, the
+autonomy level (plan first; report, then act; act within the brief: never lower than the
+operator's words set), the
+tier, and how to report. The child's record lives under yours.
+
+## Child or subagent
+Measured over 2,388 delegations: a child costs about $10 fixed plus $1.7 per 100 changed lines
+and an hour of wall time; a subagent about $2 fixed plus $0.7 per 100 lines, in minutes.
+A child never picks a size: it is the one child shape, sized by its brief. Quick work under a
+parent is a subagent, never a quick child; a quick root opens no child at all (`ness open`
+refuses) and resizes to full if the work grew.
+- **Inline**: a few edits you can see whole.
+- **Subagent**, the default: any task one agent can finish in one run from a written task,
+  without asking anyone along the way. Size alone (up to about 1,500 lines) is no reason for a
+  child. Run several at once only on disjoint files, or each in its own worktree; review each
+  result, and run the gate once at the end.
+- **Child**, only when the work needs what a subagent cannot have:
+  - a conversation: decisions to agree with the operator or with you along the way, or
+    steering over days;
+  - its own decomposition: a vertical it will plan and split into subagent tasks itself;
+  - isolation or duration: a live environment (tabs, services, long evaluations), or a run of
+    more than about an hour that must survive your compaction.
+- A design question you can settle with the operator yourself first: settle it, then dispatch a
+  subagent. Never open a child just to ask.
+- At the child cap (`launch.max_children`), wait for a child to land and never raise the cap:
+  work that needs a child never moves into a subagent to get past the cap.
+
+## Tiers
+A child runs at the project's base rung unless its job says otherwise: open it with
+`--kind <name>` and the selector picks the rung, or name one with `--tier` (a rung above the
+recommendation needs `--reason`). Choose by who judges the output: work a check or a reviewer
+will judge runs low; work whose output is itself the judgment (design between alternatives,
+conclusion audits) runs high. Escalate a stuck child with `ness open --resume ID --tier up`.
+
+## Wait, then fold
+Pull `ness inbox` once and end your turn; the worker wakes you when the child reports. When
+the child's branch is in, `ness close ID --note TEXT` closes it. A handoff needs no reply:
+closing the child settles everything it sent you. A request of yours that no longer holds:
+`ness reply ITEM --as withdrawn --body REASON`, or close with `--withdraw`.
+`ness integrate --subject 'type(scope): summary'` folds your own branch through the gate into your
+manager's branch as one commit with that Conventional Commit subject. Always pass `--subject`: a
+project not on `integrate.mode = "squash"` ignores it with a warning.
+-- .agents/skills/ness-program/SKILL.md --
+---
+name: ness-program
+description: Run a program as a root: read back, map invariants and verticals, refine the map with the operator, run waves of children, fold results back, release.
+---
+
+# ness program
+
+A program is too big for one session. The root owns the map; children own the verticals.
+
+## The six steps
+1. **Read back.** Survey with `ness-sweep` subagents, then restate the brief as roadmap r1
+   in `docs/program/roadmap.md`: parts, dependencies, holes, questions. Minutes, not hours.
+2. **Only invariants at the root**: what two or more verticals depend on, or what is
+   expensive to reverse. Nothing else is decided at the root.
+3. **Everything else is a vertical** with its reason, its reopen trigger and its owner.
+4. **Brainstorm and refine, in rounds, with the operator.** This phase decides the program;
+   it is never one pass. Each round: show the map and the program doctrine, take the
+   operator's answers, challenge the map with them (Challenge), revise. Each project doctrine
+   entry is kept, amended or dropped for this run. The phase ends when the operator accepts
+   the map and the program doctrine and has answered the autonomy question.
+5. **Waves** of the verticals whose inputs exist; each result folds back as a new map
+   revision.
+6. **Children integrate into the root branch; the root releases.**
+
+## Rules
+- Grounding (measurements, surveys, audits) runs in subagents; the root reads conclusions.
+- A named operator preference (a tool, a vendor, a shape) becomes an explicit open decision in
+  `docs/program/decisions.md`, never a thing built past.
+- The root reads every child packet; the operator gets what it must decide, with options and a
+  recommendation.
+- Each vertical names its spec owner in the map; the root never accepts a spec the operator
+  owns, it asks for it.
+- Injected work becomes a map row before its child opens.
+- Every fold and every new vertical is a new map revision, and the map ends with a `## Recovery`
+  section holding a recovery line naming the last decision id, so a compacted root can find its place.
+- A verification or cutover phase is a map section with its own probes (`ness probe start`),
+  never a root that watches a screen.
+- Fixes to shared tooling go to base through a quick task, not through the root branch.
+- Only the root numbers decisions (`docs/program/decisions.md`). A child may keep plain dated
+  notes for its own memory, with no ids, never cited upward; its handoff states its choices and
+  the rejected alternatives in words.
+- A brief states the question and its limits, never candidate solutions.
+- A wake-up with nothing to decide gets no chat summary.
+
+## Challenge
+New information (an operator remark, a result, a failed assumption) challenges the map; the map
+does not absorb it. Ask which invariant, reopen trigger or doctrine entry it weakens, say so,
+then revise. Never reword the information to fit. A research program goes deeper
+(`ness-research`).
+
+At spec acceptance and at every fold:
+- Read the spec or result file, not the message.
+- List the alternatives the child rejected and why; none listed, send it back.
+- Write what would make this naive.
+- Name the doctrine entries checked, in the decision.
+- Outcomes: accept, amend, refuse. Refuse a naive question or baseline even when the mechanics
+  hold.
+- A fold is reviewed by an independent `ness-review` subagent, on the second pass too; the root
+  decides from its findings.
+
+## Doctrine
+The operator's principles in their words, each with the date first said: project doctrine in
+`docs/doctrine.md` (ids P<n>), program doctrine at the top of the roadmap (G<n>). The root
+proposes an entry when the operator states a principle; it binds once the operator confirms,
+and only their words change it. At the end of the run, propose which G entries move up to
+project level.
+
+## Checkpoints
+`ness send --to operator --intent checkpoint --body @FILE` with Done, Now, Next (and Ask). Send
+one at each wave landing, map change, doctrine change, change to the success criteria (what counts as done, correct or better), or
+block; it replaces heartbeat lines and "since you left". Link the review page with `--page`.
+
+## Autonomy
+Asked per program run, never fixed by the profile: one question when the operator accepts the
+map, and again at any checkpoint that may change it or the success criteria.
+- **gate**: stop at every checkpoint.
+- **bands**: free inside the stated bands; list what stops the root (a change to the success criteria or the method,
+  a naive baseline, a new, dropped or redrawn vertical, a doctrine change, a budget overrun).
+- **to checkpoint X**: free until X, then wait.
+- **custom**: the operator's words.
+
+Record the mode, the operator's words and the date under `## Autonomy` in the roadmap; only
+the operator changes it. Set each child's brief level from it, never above it.
+Not asked yet: ask the question above before the first wave.
+
+## Operator review format
+Checkpoint page: HTML, linked with `--page`; Done, Now, Next first, detail below.
+-- .claude/agents/ness-design.md --
+---
+name: ness-design
+description: Designs an interface or plan for a hard problem and returns the options with a recommendation.
+model: opus
+effort: high
+---
+
+Lay out the viable designs, their costs and the one you recommend, with the reason.
+-- .claude/agents/ness-review.md --
+---
+name: ness-review
+description: Reviews a change against its plan and the project's rules, and reports findings ranked by severity.
+model: opus
+effort: high
+---
+
+Review the change you are given. Report each finding with its file and line, ranked by severity. Check intent too: does the change do, product-wise, what the brief and the operator's words ask? Flag every product call (what users see, what the product does or promises) made without an operator ruling, above all one a test, a contract or a frozen file locks in.
+-- .claude/agents/ness-sweep.md --
+---
+name: ness-sweep
+description: Read-only search. Finds files and facts across the repository and returns paths with one-line findings.
+model: sonnet
+effort: medium
+---
+
+Search for what the caller asks and do not edit files. Write long results to a file, then return its path and a summary of at most 8,000 characters.
+-- .claude/agents/ness-verify.md --
+---
+name: ness-verify
+description: Adversarially verifies one claim or finding and returns a verdict with evidence.
+model: opus
+effort: high
+---
+
+Try to prove the claim wrong. Return CONFIRMED or REJECTED with the evidence that decides it.
+-- .claude/settings.json --
+{
+  "autoCompactWindow": 265000,
+  "env": {
+    "CLAUDE_CODE_SUBAGENT_MODEL": "sonnet"
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "command -v ness >/dev/null || exit 0; ness hook session-start",
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "command -v ness >/dev/null || exit 0; ness hook pre-tool",
+            "type": "command"
+          }
+        ]
+      }
+    ]
+  }
+}
+-- .gitignore --
+# ness:begin core/ignore
+.worktrees/
+*.ness-new
+# ness:end core/ignore
+-- .ness/lock.json --
+{
+  "entries": [
+    {
+      "hash": "7c106f5457432c684fcfe6ed9d8c17a88b317e24ed35de4ecc8efa67113d6d96",
+      "id": ".agents/skills/ness-entry/SKILL.md",
+      "kind": "file",
+      "owner": "core",
+      "path": ".agents/skills/ness-entry/SKILL.md",
+      "upstream": "7c106f5457432c684fcfe6ed9d8c17a88b317e24ed35de4ecc8efa67113d6d96"
+    },
+    {
+      "hash": "e74fe6b0e34e49e23dad9da73af0d0bb0657ece236bbb55b5be8c75312303a48",
+      "id": ".agents/skills/ness-launch/SKILL.md",
+      "kind": "file",
+      "owner": "core",
+      "path": ".agents/skills/ness-launch/SKILL.md",
+      "upstream": "e74fe6b0e34e49e23dad9da73af0d0bb0657ece236bbb55b5be8c75312303a48"
+    },
+    {
+      "hash": "b887b1b5a2e3318464168290af58f7ca3918d510a59c0fc0b14124e5048dec91",
+      "id": ".agents/skills/ness-program/SKILL.md",
+      "kind": "file",
+      "owner": "program",
+      "path": ".agents/skills/ness-program/SKILL.md",
+      "upstream": "b887b1b5a2e3318464168290af58f7ca3918d510a59c0fc0b14124e5048dec91"
+    },
+    {
+      "hash": "0bddb3c40611e1f8c50a12dfa81606ed2d0cfa706f32bde38b19a8a08c7c4674",
+      "id": ".claude/agents/ness-design.md",
+      "kind": "file",
+      "owner": "core",
+      "path": ".claude/agents/ness-design.md",
+      "upstream": "0bddb3c40611e1f8c50a12dfa81606ed2d0cfa706f32bde38b19a8a08c7c4674"
+    },
+    {
+      "hash": "029cfbe3181877960d9d68bcc334f0415a2250db946942f80fb198e23a0cca0e",
+      "id": ".claude/agents/ness-review.md",
+      "kind": "file",
+      "owner": "core",
+      "path": ".claude/agents/ness-review.md",
+      "upstream": "029cfbe3181877960d9d68bcc334f0415a2250db946942f80fb198e23a0cca0e"
+    },
+    {
+      "hash": "c064fe6fbc747d259d94f5356d7898d582873e9124f3582f72afa7bd223543f6",
+      "id": ".claude/agents/ness-sweep.md",
+      "kind": "file",
+      "owner": "core",
+      "path": ".claude/agents/ness-sweep.md",
+      "upstream": "c064fe6fbc747d259d94f5356d7898d582873e9124f3582f72afa7bd223543f6"
+    },
+    {
+      "hash": "32dbadcc0dfdfab8d2a77a6f67a6d31fa95313c56ffc5ac9e9726451c854ad00",
+      "id": ".claude/agents/ness-verify.md",
+      "kind": "file",
+      "owner": "core",
+      "path": ".claude/agents/ness-verify.md",
+      "upstream": "32dbadcc0dfdfab8d2a77a6f67a6d31fa95313c56ffc5ac9e9726451c854ad00"
+    },
+    {
+      "hash": "54b8f797c71bec0254230622d533f52c6b0b3bf45da903108944df7671a4fbfe",
+      "id": ".claude/settings.json:autoCompactWindow",
+      "kind": "key",
+      "owner": "core",
+      "path": ".claude/settings.json",
+      "upstream": "54b8f797c71bec0254230622d533f52c6b0b3bf45da903108944df7671a4fbfe"
+    },
+    {
+      "hash": "64cf7274ef5e9d5b9655b1fc69bb348cebe0d6dbe5fd531286991d6b05be3c00",
+      "id": ".claude/settings.json:env.CLAUDE_CODE_SUBAGENT_MODEL",
+      "kind": "key",
+      "owner": "core",
+      "path": ".claude/settings.json",
+      "upstream": "64cf7274ef5e9d5b9655b1fc69bb348cebe0d6dbe5fd531286991d6b05be3c00"
+    },
+    {
+      "hash": "544549b950bc8ad08b87a6cc2f561cfa5ef9e71400bf75e59497fa560883450c",
+      "id": ".claude/settings.json:hooks.PreToolUse[ness hook pre-tool]",
+      "kind": "key",
+      "owner": "core",
+      "path": ".claude/settings.json",
+      "upstream": "544549b950bc8ad08b87a6cc2f561cfa5ef9e71400bf75e59497fa560883450c"
+    },
+    {
+      "hash": "a9cda88dbb99f9af0ccca5b75e9c1a4d6faceab8a0edaf86d8c69987d058549d",
+      "id": ".claude/settings.json:hooks.SessionStart[ness hook session-start]",
+      "kind": "key",
+      "owner": "core",
+      "path": ".claude/settings.json",
+      "upstream": "a9cda88dbb99f9af0ccca5b75e9c1a4d6faceab8a0edaf86d8c69987d058549d"
+    },
+    {
+      "hash": "3c74c93317f015d16370349a76529b6f8332c808bdd589e7640eeba6a1b1b874",
+      "id": ".claude/skills",
+      "kind": "link",
+      "owner": "core",
+      "path": ".claude/skills",
+      "upstream": "3c74c93317f015d16370349a76529b6f8332c808bdd589e7640eeba6a1b1b874"
+    },
+    {
+      "hash": "77fac72bb273579361d7614a4cd698d646ba336dbf114454330f5fa3df85c2d3",
+      "id": ".gitignore#core/ignore",
+      "kind": "block",
+      "owner": "core",
+      "path": ".gitignore",
+      "upstream": "77fac72bb273579361d7614a4cd698d646ba336dbf114454330f5fa3df85c2d3"
+    },
+    {
+      "hash": "3f915a8138e863fc4ee7aa4ca12c8ee6db3d53b5c4872081c283881e083e0362",
+      "id": "AGENTS.md#core/router",
+      "kind": "block",
+      "owner": "core",
+      "path": "AGENTS.md",
+      "upstream": "3f915a8138e863fc4ee7aa4ca12c8ee6db3d53b5c4872081c283881e083e0362"
+    },
+    {
+      "hash": "a54ff182c7e8acf56acfd6e4b9c3ff41e2c41a31c9b211b2deb9df75d9a478f9",
+      "id": "CLAUDE.md",
+      "kind": "link",
+      "owner": "core",
+      "path": "CLAUDE.md",
+      "upstream": "a54ff182c7e8acf56acfd6e4b9c3ff41e2c41a31c9b211b2deb9df75d9a478f9"
+    },
+    {
+      "hash": "b0f42e34456d2f547812bc695ce07cc0745fcdb458a56d2dc1ba2805ce7976aa",
+      "id": "docs/doctrine.md",
+      "kind": "seed",
+      "owner": "program",
+      "path": "docs/doctrine.md",
+      "upstream": "b0f42e34456d2f547812bc695ce07cc0745fcdb458a56d2dc1ba2805ce7976aa"
+    },
+    {
+      "hash": "94e632ef0d4b8d24a33d8dfd34e6846c6662fca43ceb6aa778c0f81a96e2554b",
+      "id": "docs/program/briefs/TEMPLATE.md",
+      "kind": "seed",
+      "owner": "program",
+      "path": "docs/program/briefs/TEMPLATE.md",
+      "upstream": "94e632ef0d4b8d24a33d8dfd34e6846c6662fca43ceb6aa778c0f81a96e2554b"
+    },
+    {
+      "hash": "f521a7226cd1e81a49ae8b1ea77d9f002855c2b09008159eb60ccfbbb126b1f9",
+      "id": "docs/program/decisions.md",
+      "kind": "seed",
+      "owner": "program",
+      "path": "docs/program/decisions.md",
+      "upstream": "f521a7226cd1e81a49ae8b1ea77d9f002855c2b09008159eb60ccfbbb126b1f9"
+    },
+    {
+      "hash": "a425e26330f13601d001f40a73b2d68504d3b7b9338069856219cfb545d9022b",
+      "id": "docs/program/roadmap.md",
+      "kind": "seed",
+      "owner": "program",
+      "path": "docs/program/roadmap.md",
+      "upstream": "a425e26330f13601d001f40a73b2d68504d3b7b9338069856219cfb545d9022b"
+    }
+  ],
+  "ness": "0.1.0",
+  "profiles": {
+    "core": "0.1.0",
+    "program": "0.1.0"
+  },
+  "schema": 1
+}
+-- .ness/ness.toml --
+ness = "0.1"
+project = "fixture"
+base = "main"
+gate = "true"
+profiles = ["program"]
+-- AGENTS.md --
+<!-- ness:begin core/router -->
+## Sessions (ness)
+Applies only when the `ness` command exists in this checkout. Otherwise ignore this block.
+
+This repository runs the ness harness. Start every session by loading the `ness-entry` skill.
+<!-- ness:end core/router -->
+-- docs/doctrine.md --
+# Doctrine
+
+The operator's principles, in their words, each with the date first said. The root proposes an
+entry; it binds once the operator confirms. Only the operator's words change it. Short and slow.
+
+- **P1** (YYYY-MM-DD) "operator's words"
+-- docs/program/briefs/TEMPLATE.md --
+# Brief: <vertical id> <title>
+
+Copy this file to `briefs/<vertical>.md`; a brief does not promote side remarks to rules.
+
+## Question
+The one question this child answers or the one thing it builds, with its limits; no candidate solutions.
+
+## Outcome
+What is true when the child is done, checkable by someone else.
+
+## Invariants and doctrine
+The root invariants and the doctrine entries (P<n>, G<n>) that bind this child, by id, verbatim.
+
+## Operator words
+What the operator said that applies, verbatim, by decision id.
+
+## Sources
+Where to read: files, specs, earlier briefs, survey results.
+
+## Rights and limits
+What the child may touch and what it must not. Autonomy level, from the program's Autonomy mode.
+
+## Tier
+The child's work size and model tier.
+
+## Spec owner
+Who writes the spec for this vertical: the root, the child or the operator.
+
+## Integration target
+The branch the child integrates into.
+
+## How to report
+A handoff with Done, Now, Next; choices and rejected alternatives in words; notes without ids.
+-- docs/program/decisions.md --
+# Decisions
+
+Append-only ledger with stable ids. Each entry: `- **D<n>** (date) decision; who decided; why.`
+Ids are never reused or renumbered; a superseded decision stays and the newer entry names it.
+
+- **D1** (YYYY-MM-DD) The program opened; the map is r1.
+-- docs/program/roadmap.md --
+# Roadmap r1
+
+Revision r1. Every fold and every new vertical is a new revision (r2, r3, ...).
+
+## Program doctrine
+This run's principles in the operator's words, each with the date first said. List the project
+doctrine entries kept for this run by id (P<n>).
+
+| Id | Operator's words | Said |
+|---|---|---|
+| G1 | | |
+
+## Invariants
+What two or more verticals depend on, or what is expensive to reverse. One line each, by id.
+
+| Id | Invariant | Why it is one |
+|---|---|---|
+| I1 | | |
+
+## Verticals
+Everything else. The spec owner is who writes the vertical's spec: the root, the child, or
+the operator (then the root asks for it and never writes it).
+
+| Id | Vertical | Reason | Reopen trigger | Owner | Spec owner | State |
+|---|---|---|---|---|---|---|
+| V1 | | | | | | open |
+
+## Waves
+A wave is the set of verticals whose inputs exist. Each result folds back as a new revision.
+
+| Wave | Verticals | Started | Landed |
+|---|---|---|---|
+| W1 | | | |
+
+## Conduct
+Executor per vertical (child session or subagent) and why; order; concurrency cap.
+
+## Releases
+Unit of deploy; dormant versus activation; who gives the go.
+
+## Autonomy
+Mode (gate / bands / to checkpoint X / custom), the operator's words, the date; for bands, what is inside and what stops the root.
+
+## Recovery
+Recovery line: last decision id D1; last wave event none.

@@ -1,6 +1,7 @@
 package testkit
 
 import (
+	"errors"
 	"flag"
 	"os"
 	"path/filepath"
@@ -35,16 +36,24 @@ func Golden(t *testing.T, path, got string) {
 // ModuleRoot is the directory holding go.mod above the test's working directory.
 func ModuleRoot(t *testing.T) string {
 	t.Helper()
-	dir, err := os.Getwd()
+	dir, err := moduleRoot()
 	if err != nil {
 		t.Fatal(err)
 	}
+	return dir
+}
+
+func moduleRoot() (string, error) {
+	dir, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
 	for {
 		if _, serr := os.Stat(filepath.Join(dir, "go.mod")); serr == nil {
-			return dir
+			return dir, nil
 		}
 		if dir == filepath.Dir(dir) {
-			t.Fatal("no go.mod above the test directory")
+			return "", errors.New("no go.mod above the test directory")
 		}
 		dir = filepath.Dir(dir)
 	}

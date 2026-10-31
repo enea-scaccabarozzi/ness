@@ -1,16 +1,21 @@
 package cli_test
 
 import (
+	"cmp"
+	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/rogpeppe/go-internal/testscript"
 
+	"github.com/enea-scaccabarozzi/ness/internal/atom/releases"
 	"github.com/enea-scaccabarozzi/ness/internal/cli"
 	"github.com/enea-scaccabarozzi/ness/internal/testkit"
 	"github.com/enea-scaccabarozzi/ness/internal/ui"
+	"github.com/enea-scaccabarozzi/ness/internal/update"
 )
 
 func TestMain(m *testing.M) {
@@ -40,6 +45,24 @@ func TestMain(m *testing.M) {
 					panic(err)
 				}
 				d.Notes = string(b)
+			}
+			if dir, err := os.UserConfigDir(); err == nil {
+				d.Registry = update.Registry{Path: filepath.Join(dir, "ness", "projects")}
+			}
+			if dir, err := os.UserCacheDir(); err == nil {
+				d.CacheDir = filepath.Join(dir, "ness")
+			}
+			d.Releases = releases.Client{
+				Base: cmp.Or(os.Getenv("NESS_RELEASES_URL"), "http://127.0.0.1:1"), // never the real network in tests
+				HTTP: &http.Client{Timeout: 2 * time.Minute},
+			}
+			d.Executable = os.Getenv("NESS_TEST_EXECUTABLE")
+			if d.Executable == "" {
+				exe, err := os.Executable()
+				if err != nil {
+					panic(err)
+				}
+				d.Executable = exe
 			}
 			d.TTY = os.Getenv("NESS_TEST_TTY") == "1"
 			d.Term = ui.Detect(os.Stdin, os.Stdout)

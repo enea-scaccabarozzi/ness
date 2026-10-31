@@ -2,14 +2,19 @@
 package main
 
 import (
+	"cmp"
+	"net/http"
 	"os"
+	"path/filepath"
 	"runtime"
 	"runtime/debug"
 	"strings"
 	"time"
 
+	"github.com/enea-scaccabarozzi/ness/internal/atom/releases"
 	"github.com/enea-scaccabarozzi/ness/internal/cli"
 	"github.com/enea-scaccabarozzi/ness/internal/ui"
+	"github.com/enea-scaccabarozzi/ness/internal/update"
 )
 
 // version is the release version, set at release time with -ldflags "-X main.version=<version>";
@@ -58,7 +63,36 @@ func main() {
 		GOOS:         runtime.GOOS,
 		TTY:          isTerminal(os.Stdin),
 		Term:         ui.Detect(os.Stdin, os.Stdout),
+		Registry:     update.Registry{Path: userDir(os.UserConfigDir, "projects")},
+		CacheDir:     userDir(os.UserCacheDir, ""),
+		Releases: releases.Client{
+			Base: cmp.Or(os.Getenv("NESS_RELEASES_URL"), releases.DefaultBase),
+			HTTP: &http.Client{Timeout: 2 * time.Minute},
+		},
+		Executable: executable(),
 	}))
+}
+
+// executable is this binary's path, "unknown path" when the OS cannot say.
+func executable() string {
+	p, err := os.Executable()
+	if err != nil {
+		return "unknown path"
+	}
+	return trimDeleted(p)
+}
+
+// trimDeleted drops the " (deleted)" Linux appends to /proc/self/exe once the running binary was
+// replaced on disk, so an upgraded binary is found at its path (R-WRK-009).
+func trimDeleted(p string) string { return strings.TrimSuffix(p, " (deleted)") }
+
+// userDir is <base>/ness/<name>, "" when the user directory is unknown, never a relative path.
+func userDir(base func() (string, error), name string) string {
+	dir, err := base()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(dir, "ness", name)
 }
 
 // isTerminal reports whether f is a character device other than /dev/null (a terminal).

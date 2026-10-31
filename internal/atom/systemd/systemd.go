@@ -73,8 +73,12 @@ WantedBy=default.target
 // FirstWord is the program of an ExecStart= value, undoing exactly what Unit's quoting did; an
 // unquoted word (a hand-written unit) is read up to the first blank.
 func FirstWord(execStart string) string {
-	v := strings.TrimSpace(execStart)
-	var word string
+	return strings.NewReplacer("%%", "%", "$$", "$").Replace(firstWord(execStart))
+}
+
+// firstWord is the first systemd word of v with its quotes and backslash escapes undone.
+func firstWord(v string) string {
+	v = strings.TrimSpace(v)
 	if rest, quoted := strings.CutPrefix(v, `"`); quoted {
 		var b strings.Builder
 		for i := 0; i < len(rest) && rest[i] != '"'; i++ {
@@ -83,11 +87,48 @@ func FirstWord(execStart string) string {
 			}
 			b.WriteByte(rest[i])
 		}
-		word = b.String()
-	} else if f := strings.Fields(v); len(f) > 0 {
-		word = f[0]
+		return b.String()
 	}
-	return strings.NewReplacer("%%", "%", "$$", "$").Replace(word)
+	if f := strings.Fields(v); len(f) > 0 {
+		return f[0]
+	}
+	return ""
+}
+
+// EnvPATH is the PATH the project's unit sets with Environment=, "" when it sets none, so a
+// re-point keeps the install-time PATH; an error wrapping fs.ErrNotExist without a unit.
+func (s Supervisor) EnvPATH(project string) (string, error) {
+	data, err := os.ReadFile(s.UnitPath(project)) //nolint:gosec // the unit of this project
+	if err != nil {
+		return "", err
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if env, found := strings.CutPrefix(line, "Environment="); found {
+			if path, ok := strings.CutPrefix(firstWord(env), "PATH="); ok {
+				return strings.ReplaceAll(path, "%%", "%"), nil
+			}
+		}
+	}
+	return "", nil
+}
+
+// ExecBinary is the program the project's unit runs: an error wrapping fs.ErrNotExist without a
+// unit, and an error naming the unit when it has no ExecStart program.
+func (s Supervisor) ExecBinary(project string) (string, error) {
+	unit := s.UnitPath(project)
+	data, err := os.ReadFile(unit) //nolint:gosec // the unit of this project
+	if err != nil {
+		return "", err
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if start, found := strings.CutPrefix(line, "ExecStart="); found {
+			if prog := FirstWord(start); prog != "" {
+				return prog, nil
+			}
+			break
+		}
+	}
+	return "", fmt.Errorf("unit %s has no ExecStart", unit)
 }
 
 // owner checks the unit file at path: its content, and nil when absent or owned by root.

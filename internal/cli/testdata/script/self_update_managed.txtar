@@ -1,0 +1,61 @@
+# A binary installed by go install or mise is not written: self-update prints that tool's command
+# and refuses. A binary in ~/.local/bin is ness's own and is installed. The ceiling runs before the
+# managed check, so the tool command never names a version a registered project cannot run.
+# covers: R-UPD-045, R-UPD-046
+releases 0.2.0
+
+# go install (~/go/bin).
+# rejects: a ManagedBy that never matches, or that writes before refusing
+mkdir $HOME/go/bin
+cp stub $HOME/go/bin/ness
+chmod 755 $HOME/go/bin/ness
+env NESS_TEST_EXECUTABLE=$HOME/go/bin/ness
+exits 4 ness self-update
+stderr 'run: go install github\.com/enea-scaccabarozzi/ness/cmd/ness@v0\.2\.0'
+cmp $HOME/go/bin/ness stub
+exec ls $HOME/go/bin
+cmp stdout ls-ness.txt
+
+# mise (MISE_DATA_DIR unset: ~/.local/share/mise/installs).
+# rejects: a ManagedBy that knows only go, or prints the go command for a mise binary
+mkdir $HOME/.local/share/mise/installs/github-enea-scaccabarozzi-ness/0.1.0
+cp stub $HOME/.local/share/mise/installs/github-enea-scaccabarozzi-ness/0.1.0/ness
+chmod 755 $HOME/.local/share/mise/installs/github-enea-scaccabarozzi-ness/0.1.0/ness
+env NESS_TEST_EXECUTABLE=$HOME/.local/share/mise/installs/github-enea-scaccabarozzi-ness/0.1.0/ness
+exits 4 ness self-update
+stderr 'run: mise use -g github:enea-scaccabarozzi/ness@0\.2\.0'
+! stderr 'go install'
+cmp $HOME/.local/share/mise/installs/github-enea-scaccabarozzi-ness/0.1.0/ness stub
+
+# ~/.local/bin is not managed.
+# rejects: a ManagedBy that refuses every binary under $HOME
+mkdir $HOME/.local/bin
+cp stub $HOME/.local/bin/ness
+chmod 755 $HOME/.local/bin/ness
+env NESS_TEST_EXECUTABLE=$HOME/.local/bin/ness
+exec ness self-update
+stdout '^ness 0\.2\.0 installed at '
+exec $HOME/.local/bin/ness --version
+stdout 'ness version 0\.2\.0'
+
+# A managed binary and a registered project pinned 0.1, newest 0.3.0: the ceiling refuses first.
+# rejects: a tool command printed for a version a registered project cannot run
+cd $WORK/repo
+exec ness init --gate true --base main --yes
+cd $WORK
+releases 0.2.0 0.3.0
+env NESS_TEST_EXECUTABLE=$HOME/go/bin/ness
+exits 4 ness self-update
+stderr 'cannot run .*repo/\.ness/ness\.toml \(ness = "0\.1"\): run ness upgrade in '
+! stderr 'go install'
+cmp $HOME/go/bin/ness stub
+# rejects: the tool command naming the newest release instead of the target the ceiling passed
+exits 4 ness self-update --version 0.2.0
+stderr 'run: go install github\.com/enea-scaccabarozzi/ness/cmd/ness@v0\.2\.0'
+! stderr '0\.3\.0'
+
+-- stub --
+#!/bin/sh
+echo ness version 0.1.0
+-- ls-ness.txt --
+ness

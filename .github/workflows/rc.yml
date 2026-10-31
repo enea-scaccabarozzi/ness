@@ -1,0 +1,38 @@
+# Cut a release candidate by hand from the head of release-please's pull request (R-UPD-091):
+# the next vX.Y.Z-rc.N tag, after the Running sessions notes test, published by goreleaser as a
+# GitHub pre-release. A tag pushed with GITHUB_TOKEN triggers no workflow, so goreleaser runs
+# here and only here for rc tags (R-UPD-090).
+name: rc
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch to cut the rc from (release-please's pull request)
+        default: release-please--branches--main
+permissions:
+  contents: read
+concurrency: rc
+jobs:
+  rc:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+      - name: Next rc tag
+        id: tag
+        run: |
+          ver=$(jq -r '."."' .release-please-manifest.json)
+          tag=$(sh .github/scripts/release-check.sh rc "$ver")
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - run: go test ./internal/sync/
+      - run: git tag "$TAG" && git push origin "$TAG"
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+      - run: goreleaser release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

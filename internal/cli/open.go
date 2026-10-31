@@ -416,7 +416,7 @@ func runLaunch(d Deps, s *store.Store, c caller, env *launchEnv, o openOpts, bri
 	model, _ := session.TierEffort(env.cfg.Tiers[ch.Tier], env.client.Name())
 	err = launcher(d, s, env).Run(session.Request{
 		ID: l.ID, Model: model, Effort: ch.Effort,
-		FallbackModel: env.cfg.Models.FallbackModel, Ness: executable(), Brief: brief,
+		FallbackModel: env.cfg.Models.FallbackModel, Ness: d.Executable, Brief: brief,
 	})
 	if errors.Is(err, session.ErrStalled) {
 		return refuse("session %s did not report ready within %s (stalled launch); "+
@@ -643,7 +643,7 @@ func runResume(d Deps, s *store.Store, c caller, env *launchEnv, o openOpts, bri
 	model, _ := session.TierEffort(env.cfg.Tiers[tier], env.client.Name())
 	err = launcher(d, s, env).Run(session.Request{
 		ID: sess.ID, Model: model, Effort: effort,
-		FallbackModel: env.cfg.Models.FallbackModel, Ness: executable(), Brief: brief,
+		FallbackModel: env.cfg.Models.FallbackModel, Ness: d.Executable, Brief: brief,
 	})
 	if errors.Is(err, session.ErrStalled) {
 		return refuse("session %s did not report ready within %s; run ness open --resume %s again",

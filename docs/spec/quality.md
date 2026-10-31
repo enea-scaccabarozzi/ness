@@ -13,11 +13,12 @@ I1–I6 and lanes, D1, D2, D28–D34.
   Verify: CI — `go list -m` equals it; `CGO_ENABLED=0 go build ./cmd/ness` succeeds.
 - **R-QA-002** Packages MUST follow the §11 layout (`cmd/ness` main only, `internal/cli`,
   `config`, `sync`, `profile`, `store`, `hook`, `session`, `worker`, `probe`, `stats`, `notify`, `rule`,
-  `shell`, `ui`, `check`, `ladder`, `atom/*`, `profiles/`).
+  `shell`, `ui`, `check`, `ladder`, `update`, `atom/*`, `profiles/`).
   Verify: review + unit — a test listing packages against the allowed set.
 - **R-QA-003** `cmd/ness` MUST contain only `main` wiring (composition root).
   Verify: review / go-strict audit.
-- **R-QA-004** Releases MUST be built by goreleaser as static binaries.
+- **R-QA-004** Releases, and rc pre-releases (R-UPD-091), MUST be built by goreleaser as static
+  binaries.
   Verify: CI — `goreleaser check` and a snapshot build; `file` reports statically linked.
 - **R-QA-046** The binary's release version MUST be the `-ldflags` value or the release tag it was
   built from, and the build MUST carry the commit it was built from: `--version`, the worker's
@@ -109,7 +110,7 @@ I1–I6 and lanes, D1, D2, D28–D34.
 - **R-QA-030** Commits MUST follow Conventional Commits.
   Verify: CI — commit lint on the PR range.
 - **R-QA-031** Releases MUST be cut with release-please, whose notes include a "running sessions"
-  section.
+  section; rc pre-releases (R-UPD-091), cut from its release PR head, carry the same section.
   Verify: review — release-please config with that section.
 - **R-QA-044** The go-strict pre-push hook MUST run only build, lint, audit and the sync check; the
   test suite runs in the gate integrate uses and in CI (D44).

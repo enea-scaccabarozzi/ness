@@ -1,0 +1,102 @@
+# A failed unattended install is recorded and backed off: the next pass within 24 h makes no
+# release request and logs nothing new; a newer offer is tried at once. An older offer never
+# overwrites a newer binary; a failed or backed-off install, or an unreadable registry, never holds
+# the project's own upgrade; doctor shows the failed install; a corrupt record heals.
+# covers: R-UPD-080
+mkdir $WORK/bin
+cp stub $WORK/bin/ness
+chmod 755 $WORK/bin/ness
+env NESS_TEST_EXECUTABLE=$WORK/bin/ness
+env NESS_TEST_NOW=2026-10-08T10:00:00Z
+cd repo
+exec ness init --gate true --base main --yes
+exec sh -c 'cat $WORK/install.toml >> .ness/ness.toml'
+exec git add -A
+exec git commit -q -m 'ness init'
+
+releases 0.2.0:badsum
+exec ness worker run --once
+cmp $WORK/bin/ness $WORK/stub
+exists $HOME/.cache/ness/install-failed.json
+grep 'checksum mismatch' $HOME/.cache/ness/install-failed.json
+grep -count=1 'automatic install of 0\.2\.0 failed: .*checksum mismatch' .git/ness/worker.log
+# rejects: a failed install retried on every pass (720 release requests an hour per worker)
+releases 0.2.0:badsum
+exec ness worker run --once
+cmp $WORK/releases.log $WORK/empty
+grep -count=1 'checksum mismatch' .git/ness/worker.log
+
+# rejects: a back-off that holds a newer offer too
+rm $HOME/.cache/ness/update.json
+releases 0.2.1
+exec ness worker run --once
+exec $WORK/bin/ness --version
+stdout 'ness version 0\.2\.1'
+! exists $HOME/.cache/ness/install-failed.json
+
+# --- A newer binary installed by hand is never overwritten by an older offer. ---
+# rejects: an already-at check by equality, which reinstalls 0.2.0 over 0.2.1
+rm $HOME/.cache/ness/update.json
+releases 0.2.0
+exec ness worker run --once
+exec $WORK/bin/ness --version
+stdout 'ness version 0\.2\.1'
+grep -count=1 '^GET /releases' $WORK/releases.log
+grep 0.1.0 $WORK/bin/ness.prev
+
+# --- A failed, then a backed-off, install does not hold this project's own upgrade. ---
+# Binary 0.2.0, lock 0.1.0, offer 0.2.5 with a bad sum.
+# rejects: the install planned first, and failing, starving the upgrade in the same pass
+env NESS_TEST_VERSION=0.2.0
+rm $HOME/.cache/ness/update.json
+releases 0.2.5:badsum
+exec ness worker run --once
+grep '"version": "0.2.5"' $HOME/.cache/ness/install-failed.json
+exec git log -1 --format=%s
+stdout '^chore\(ness\): upgrade to 0\.2\.0$'
+# rejects: a failed install that doctor does not show
+exec git reset -q --hard HEAD~1
+exec sh -c 'ness doctor; true'
+stdout '^warn\tupdate\tautomatic install of 0\.2\.5 failed: .*checksum mismatch.*\tfix: ness self-update$'
+# rejects: the back-off skip starving the upgrade for 24 h
+releases 0.2.5:badsum
+exec ness worker run --once
+cmp $WORK/releases.log $WORK/empty
+exec git log -1 --format=%s
+stdout '^chore\(ness\): upgrade to 0\.2\.0$'
+
+# --- A corrupt install-failed.json heals on the next failure, so the back-off holds again. ---
+# rejects: RecordFailure returning the read error, so every pass downloads again
+cp $WORK/garbage $HOME/.cache/ness/install-failed.json
+rm $HOME/.cache/ness/update.json
+releases 0.2.5:badsum
+exec ness worker run --once
+grep 'checksum mismatch' $HOME/.cache/ness/install-failed.json
+releases 0.2.5:badsum
+exec ness worker run --once
+cmp $WORK/releases.log $WORK/empty
+
+# --- An unreadable registry holds only the machine install, never this project's upgrade. ---
+# rejects: a Registry.List error ending the pass before the upgrade
+exec git reset -q --hard HEAD~1
+rm $XDG_CONFIG_HOME/ness/projects
+mkdir $XDG_CONFIG_HOME/ness/projects
+rm $HOME/.cache/ness/update.json
+releases 0.2.6
+exec ness worker run --once
+exec git log -1 --format=%s
+stdout '^chore\(ness\): upgrade to 0\.2\.0$'
+exec $WORK/bin/ness --version
+stdout 'ness version 0\.2\.1'
+grep -count=1 'auto-install held: registry: ' .git/ness/worker.log
+
+-- stub --
+#!/bin/sh
+echo ness version 0.1.0
+-- empty --
+-- garbage --
+{not json
+-- install.toml --
+
+[update]
+auto = "install"

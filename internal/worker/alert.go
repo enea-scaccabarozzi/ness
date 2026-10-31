@@ -153,14 +153,7 @@ func listBreaks(text string) string {
 
 // alertFor builds the alert of sess's event; Root walks the open sessions up to the operator's child.
 func (w *Worker) alertFor(sess store.Session, kind AlertKind, text, page string) Alert {
-	root := sess
-	for root.Parent != store.Operator {
-		up, ok := w.open[root.Parent]
-		if !ok {
-			break
-		}
-		root = up
-	}
+	root := w.root(sess)
 	var remote string
 	if p := w.panes[sess.ID]; p != nil {
 		remote = p.remote
@@ -169,6 +162,18 @@ func (w *Worker) alertFor(sess store.Session, kind AlertKind, text, page string)
 		Kind: kind, Project: w.Project, Title: sess.Title, Session: remote,
 		Text: cut(text, alertRunes), Page: page, Root: root.ID,
 	}
+}
+
+// root walks the open sessions up from sess to the operator's child; sess itself for a root.
+func (w *Worker) root(sess store.Session) store.Session {
+	for sess.Parent != store.Operator {
+		up, ok := w.open[sess.Parent]
+		if !ok {
+			break
+		}
+		sess = up
+	}
+	return sess
 }
 
 // deliver posts a and logs it as action notify; a failure is logged once and false lets the caller

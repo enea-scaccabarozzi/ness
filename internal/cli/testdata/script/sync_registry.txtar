@@ -1,0 +1,42 @@
+# A sync that writes, and a worker start, record the project once in the machine registry; --check
+# does not; a project whose .ness is gone is dropped by the next write; nothing but the registry
+# file appears.
+# covers: R-UPD-031, R-SYNC-072
+cd repo
+exec ness init --gate true --base main --yes
+exec sh -c 'printf "%s\n" "$WORK/repo" > $WORK/want1'
+cmp $XDG_CONFIG_HOME/ness/projects $WORK/want1
+
+# rejects: a project left unregistered until its first writing sync (the worker records it)
+rm $XDG_CONFIG_HOME/ness/projects
+exec ness worker run --once
+cmp $XDG_CONFIG_HOME/ness/projects $WORK/want1
+
+# rejects: an Add that appends without checking for the path already listed
+exec ness sync
+cmp $XDG_CONFIG_HOME/ness/projects $WORK/want1
+
+# rejects: recording on a read-only run (--check must not touch the registry)
+exec git init -q -b main ../repo2
+exec git -C ../repo2 commit -q --allow-empty -m init
+cd ../repo2
+exits 1 ness sync --check
+cmp $XDG_CONFIG_HOME/ness/projects $WORK/want1
+
+# rejects: no pruning of a listed project that no longer holds .ness/ness.toml
+rm $WORK/repo/.ness
+exec ness sync
+exec sh -c 'printf "%s\n" "$WORK/repo2" > $WORK/want2'
+cmp $XDG_CONFIG_HOME/ness/projects $WORK/want2
+
+# rejects: a lock file or temp file left beside the registry
+exec ls $XDG_CONFIG_HOME/ness
+cmp stdout $WORK/ls.txt
+
+-- repo2/.ness/ness.toml --
+ness = "0.1"
+project = "p2"
+base = "main"
+gate = "true"
+-- ls.txt --
+projects

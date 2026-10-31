@@ -120,11 +120,20 @@ comment first; `.ness/audit.py` fails a package without one.
 - Commit subjects follow [Conventional Commits](https://www.conventionalcommits.org). CI checks
   each subject with `profiles/builtin/git-conventional/commit-msg`.
 - [release-please](https://github.com/googleapis/release-please) keeps a release pull request open
-  from the commits on `main` (`release-please-config.json`). Merging it tags the version, and
-  goreleaser builds and publishes the binaries.
-- A release needs at least one `sessions:` commit since the last tag. It becomes the "Running
-  sessions" section of `CHANGELOG.md`: what an open session must do after `ness sync` picks the
-  version up. Write `sessions: nothing to do` when there is nothing.
+  from the commits on `main` (`release-please-config.json`).
+- Every stable release goes through a release candidate. Cut one from the release pull request
+  with `gh workflow run rc.yml`: it tags `vX.Y.Z-rc.N` and publishes a GitHub pre-release. Run it
+  on the field projects, and cut a new rc whenever the pull request moves.
+- Merging the pull request releases the version. The release job refuses it without an rc of the
+  same tree, the previous stable release's upgrade fixture, and a `sessions:` commit since that
+  release.
+- A `sessions:` commit becomes the "Running sessions" section of `CHANGELOG.md`: what an open
+  session must do after it merges the new version. Write `sessions: nothing to do` when there is
+  nothing. Session-record commits use `docs(sessions): …` and do not count.
+- After each stable release, commit its upgrade fixture with `scripts/upgrade-fixture.sh vX.Y.Z`.
+
+[Release ness](docs/guides/releasing.md) has every step, the promotion criteria and the recovery
+from a refused release.
 
 ## Writing style
 

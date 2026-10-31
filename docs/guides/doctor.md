@@ -25,8 +25,10 @@ ness doctor
 ```text title="Output (exit 1)"
 ness 0.1.0+b13684c9f547 at /home/you/.local/bin/ness
 ok	binary	0.1.0 at /home/you/.local/bin/ness, pin 0.1
+ok	store	no store yet
 ok	hooks-binary	hooks resolve /home/you/.local/bin/ness
 warn	worker-binary	no unit at /home/you/.config/systemd/user/ness-acme.service (worker not installed)	fix: ness worker install
+warn	update	ness 0.2.0 available (installed 0.1.0)	fix: ness self-update
 ok	herdr-version	0.9.3
 ok	client-version	claude 2.1.316
 ok	tier-models	7 tiers resolve for claude
@@ -45,8 +47,8 @@ ok	secrets	no references in .ness/ness.toml
 ok	jev	policy declared
 ```
 
-This is a fresh project: `worker-clients`, `dead-routes` and `gone-panes` read the store, and
-there is none until a command such as `ness status` creates it.
+This is a fresh project: `store`, `worker-clients`, `dead-routes` and `gone-panes` read the
+store, and there is none until a command such as `ness status` creates it.
 
 Doctor exits 1 when any check fails, and 0 otherwise, warnings included. Every check runs, even
 after a failure. `ness doctor --json` prints one object, with `name`, `status`, `detail` and
@@ -56,9 +58,11 @@ after a failure. `ness doctor --json` prints one object, with `name`, `status`, 
 
 | Check | Looks at | Common fix |
 |---|---|---|
-| `binary` | The running binary's version against the pin in `ness.toml` | Install a matching binary, or change the pin |
+| `binary` | The running binary's version against the pin in `ness.toml` | `ness self-update`, or `ness upgrade` for a pin behind the binary |
+| `store` | The store schema against the binary's. A newer store fails with the rollback steps (R-UPD-012). | `ness self-update`, or roll back the store |
 | `hooks-binary` | The binary the client hooks resolve | Put this binary first on `PATH` |
 | `worker-binary` | The binary the worker unit runs | `ness worker install` |
+| `update` | The newest release on the channel, from the check cache (R-UPD-052) | `ness self-update` |
 | `herdr-version` | The herdr version, against the tested ones | `herdr update` |
 | `client-version` | The client version, against the tested ones | `claude update` (or `codex update`) |
 | `tier-models` | Every rung's model, against the models the client lists | Edit `[tiers.NAME]` |

@@ -1,0 +1,25 @@
+# releases: the log exists before any request and records each request line; the listing is
+# newest first with rc ids ordered numerically.
+releases 0.3.0-rc.9:pre 0.1.0 0.3.0-rc.10:pre:badsum
+cmp $WORK/releases.log $WORK/empty
+get /releases?per_page=100
+stdout '"tag_name":"v0.3.0-rc.10".*"tag_name":"v0.3.0-rc.9".*"tag_name":"v0.1.0"'
+get /download/0.1.0/checksums.txt
+stdout '  ness_0.1.0_linux_arm64.tar.gz$'
+grep -count=2 '^GET /' $WORK/releases.log
+grep '^GET /releases\?per_page=100$' $WORK/releases.log
+
+# A second releases replaces the server and truncates the log; fail answers 500 to everything.
+releases fail
+cmp $WORK/releases.log $WORK/empty
+! get /releases
+stdout '^500$'
+! get /download/0.1.0/checksums.txt
+
+# lock holds the flock until the script ends.
+mkdir sub
+lock sub/held.lock
+locked sub/held.lock
+! locked sub/free.lock
+
+-- empty --

@@ -76,11 +76,24 @@ func runSync(d Deps, p *project, o syncOpts) (err error) {
 		if err := applyWithNotes(d, root, plan); err != nil {
 			return err
 		}
+		record(d, p)
 	}
 	if err := emit(d, plan, o); err != nil {
 		return err
 	}
 	return syncExit(plan, o.check)
+}
+
+// record lists the project's primary checkout in the machine registry (R-UPD-031); a failure is
+// printed and never fails the sync.
+func record(d Deps, p *project) {
+	primary, err := primaryRoot(p)
+	if err == nil {
+		err = d.Registry.Add(primary)
+	}
+	if err != nil {
+		printErr(d.Stderr, fmt.Errorf("registry: %w", err))
+	}
 }
 
 // applyWithNotes validates the release notes before Apply so a broken CHANGELOG refuses the

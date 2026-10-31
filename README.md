@@ -25,7 +25,13 @@ ness is tested solo and in small teams. See [Limits](docs/why/limits.md) for eve
 
 ## Quickstart
 
-Install ness as described in [Install](docs/start/install.md), then follow
+Install ness:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/enea-scaccabarozzi/ness/main/install.sh | sh
+```
+
+[Install](docs/start/install.md) has the other ways: mise, `go install` and the archive. Then follow
 [Quickstart](docs/start/quickstart.md) to run a first session. Every command there was run by
 hand, and its output is shown as the plain renderer prints it.
 

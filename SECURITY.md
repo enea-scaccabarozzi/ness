@@ -2,7 +2,15 @@
 
 ## Supported versions
 
-Only the latest release gets security fixes. Upgrade before you report, if you can.
+Security fixes go to the latest stable release and to the previous minor line, because a `0.N`
+binary still runs projects pinned to `0.N-1` (R-UPD-002). Upgrade with `ness self-update` before
+you report, if you can.
+
+| Version | Supported |
+|---|---|
+| The latest stable `0.N.x` | Yes |
+| The previous minor, `0.(N-1).x` | Yes |
+| Older, and release candidates | No |
 
 ## Report a vulnerability
 

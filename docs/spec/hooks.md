@@ -14,18 +14,24 @@ P4 (adopted root after compaction), D14.
   Verify: testscript — run the wired command with PATH lacking ness → exit 0, empty output.
 - **R-HOOK-002** `ness hook EVENT` invoked by a client session that is not bound to a ness session
   (no `NESS_SESSION`, no adopted conversation) MUST print nothing and exit 0 — including when the
-  payload does not parse, and with no shadowing check — except for the note of R-HOOK-019.
-  Verify: testscript — no session env; `session-start`, `pre-tool` with benign, blocked-looking
-  and garbage payloads → empty stdout, exit 0.
+  payload does not parse, and with no shadowing check — except for the note of R-HOOK-019, and
+  except R-UPD-020..022 inside a ness session (`NESS_SESSION` set, or the current branch matches
+  `session/*`).
+  Verify: testscript — no session env, on a branch not matching `session/*`; `session-start`,
+  `pre-tool` with benign, blocked-looking and garbage payloads → empty stdout, exit 0.
 
 ## `session-start`
 
 - **R-HOOK-019** `session-start` in a ness project for a conversation that is not a ness session
   MUST print the unbound note telling the agent how to promote the conversation to a root
   (R-SESS-038), write no ready mark and touch no store row; outside a ness project, or when the
-  project does not load, it MUST stay silent.
+  project does not load, it MUST stay silent — except inside a ness session (R-HOOK-002), where
+  a project that does not load because of skew prints the R-UPD-022 line instead of the note,
+  and never both.
   Verify: testscript — no session env in an initialized repo: stdout equals the note, no session
-  row; plain git repo: empty; pre-tool unbound: empty.
+  row; plain git repo: empty; pre-tool unbound: empty; no `NESS_SESSION` on branch `session/r-1`
+  with an unknown config key: stdout is the one `ness: hooks cannot run in this session: ` line,
+  without the note.
 - **R-HOOK-003** `ness hook session-start` MUST write the ready mark the launch waits for
   (R-SESS-032).
   Verify: testscript — launch in phase waiting-ready; after the hook the store shows ready.
@@ -198,5 +204,5 @@ P4 (adopted root after compaction), D14.
 - **R-HOOK-015** The hook-payload parser MUST NOT panic on any input.
   Verify: fuzz — arbitrary stdin payloads for both events.
 - **R-HOOK-016** `ness hook` with an unknown EVENT MUST exit 0 silently (fail open: an older binary meeting a newer profile must not block the
-  client).
+  client). Skew is not an unknown event: see R-UPD-020.
   Verify: testscript.

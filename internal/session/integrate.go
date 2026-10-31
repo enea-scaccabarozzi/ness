@@ -421,13 +421,18 @@ func move(g Git, s IntegrateSpec, checkout, folded, before string) error {
 
 var unsafeRef = regexp.MustCompile(`[^A-Za-z0-9._-]`)
 
+// TargetLockName is the file name of the per-target integrate lock in the lock dir.
+func TargetLockName(target string) string {
+	return "integrate-" + unsafeRef.ReplaceAllString(target, "_") + ".lock"
+}
+
 // lockTarget takes the per-target lock, waiting while another integrate into the target holds it:
 // two integrates into one target would race on the ref (R-SESS-164). The waiter logs the holder
 // the lock file names; the new holder then writes its own name. The lock is released by the
 // returned func or when the process ends.
 func lockTarget(s IntegrateSpec) (func(), error) {
 	target := s.Integration.Target
-	f, err := lockFile(s, "integrate-"+unsafeRef.ReplaceAllString(target, "_")+".lock")
+	f, err := lockFile(s, TargetLockName(target))
 	if err != nil {
 		return nil, err
 	}

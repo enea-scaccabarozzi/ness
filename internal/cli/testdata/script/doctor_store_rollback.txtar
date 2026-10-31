@@ -1,0 +1,59 @@
+# Doctor has a store check: a store newer than the binary fails naming both schemas with the fix
+# ness self-update, plus the cp rollback when the backup of this binary's schema exists; an older
+# store warns; a current store is ok with its schema. No schema number is hard-coded.
+# covers: R-UPD-012
+cd repo
+exec ness init --gate true --base main --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+env NESS_TEST_NOW=2026-10-08T10:00:00Z
+store schema SCHEMA
+store heartbeat 5 0.1.0
+
+# A current store: ok with this binary's schema, and doctor passes.
+# rejects: a store check that is missing, or prints a fixed or wrong schema number.
+exec ness doctor
+stdout '^ok\tstore\tschema '$SCHEMA'$'
+! stdout '^fail\tstore'
+
+# Keep a copy of the current store to plant as the backup later.
+cp $WORK/repo/.git/ness/state.sqlite3 $WORK/current.sqlite3
+
+# A newer store without the backup of this binary's schema: fail, both schemas, self-update, no cp.
+# A backup of another schema is planted; it is not this binary's, so it is not offered.
+# rejects: a rollback offered from any bak-v* file (the newest, the only one) instead of bak-v<M>.
+cp $WORK/current.sqlite3 $WORK/repo/.git/ness/state.sqlite3.bak-v1
+store set-version 99
+exits 1 ness doctor
+stdout '^fail\tstore\tstore schema 99, binary schema '$SCHEMA'.*\tfix: ness self-update'
+! stdout 'cp .*state\.sqlite3'
+# rejects: the store failure only folded into the other checks, with no store line of its own.
+stdout -count=1 '^fail\tstore\t'
+
+# With state.sqlite3.bak-v<M> present the fix also names the rollback, both paths in the store dir.
+# rejects: a rollback line that names the wrong schema, the wrong directory, or drops self-update.
+cp $WORK/current.sqlite3 $WORK/repo/.git/ness/state.sqlite3.bak-v$SCHEMA
+exits 1 ness doctor
+stdout '^fail\tstore\tstore schema 99, binary schema '$SCHEMA'.*\tfix: ness self-update'
+# The worker is stopped and the -wal and -shm dropped before the cp, and the worker started after:
+# a leftover -wal of the newer store would be replayed onto the restored copy.
+# rejects: a bare cp that a leftover -wal silently undoes.
+stdout 'systemctl --user stop ness-\S+; rm -f \S*\.git/ness/state\.sqlite3-wal \S*\.git/ness/state\.sqlite3-shm; cp \S*\.git/ness/state\.sqlite3\.bak-v'$SCHEMA' \S*\.git/ness/state\.sqlite3; systemctl --user start ness-\S+$'
+
+# A ness.toml from a newer ness (pin 0.3, a key only 0.3 knows) under binary 0.1.0: doctor still
+# reports the binary with the self-update fix and the store with its rollback.
+# rejects: doctor refusing (exit 4) on the unknown key before the binary and store checks run.
+cp .ness/ness.toml $WORK/good.toml
+exec sh -c '{ echo "futurekey = 1"; sed "s/^ness = .*/ness = \"0.3\"/" $WORK/good.toml; } > .ness/ness.toml'
+exits 1 ness doctor
+stdout '^fail\tbinary\t.*pins ness 0\.3\.x.*\tfix: ness self-update$'
+stdout '^fail\tstore\tstore schema 99, .*; cp \S*\.git/ness/state\.sqlite3\.bak-v'$SCHEMA' '
+! stderr 'unknown key'
+cp $WORK/good.toml .ness/ness.toml
+
+# An older store (written raw, doctor does not migrate it): a warning, not a fail.
+# rejects: a check that treats any schema mismatch as a newer-store failure.
+store set-version 1
+exec ness doctor
+stdout '^warn\tstore\t'
+! stdout '^fail\tstore'

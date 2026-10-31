@@ -43,11 +43,13 @@ ness [flags]
 | [ness secret list](./secret-list.md) | List the stored names, marking those ness.toml references |
 | [ness secret set](./secret-set.md) | Store a secret read from stdin (never from the command line) |
 | [ness secret unset](./secret-unset.md) | Remove a stored secret |
+| [ness self-update](./self-update.md) | Install a newer ness release in place of this binary |
 | [ness send](./send.md) | Send a message to your manager, one of your children, another root (as a root) or the operator |
 | [ness size](./size.md) | Show or change the work size of a root |
 | [ness stats](./stats.md) | Tokens, context, compactions, tool bytes and cost of this project's sessions, from their transcripts |
 | [ness status](./status.md) | The session tree: tier, phase, context, idle time, obligations; probes; the worker |
 | [ness sync](./sync.md) | Render core, features and profiles into this repository |
+| [ness upgrade](./upgrade.md) | Move this project to the running binary: migrate, sync, bump the pin and commit |
 | [ness worker](./worker.md) | The project's worker: run it here, or install it as a systemd user unit |
 | [ness worker install](./worker-install.md) | Write and start the systemd user unit ness-\<project>.service |
 | [ness worker run](./worker-run.md) | Run the worker in this terminal: one process per project, a pass every 5 s |

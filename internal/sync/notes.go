@@ -1,6 +1,8 @@
 package sync
 
 import (
+	"cmp"
+	"errors"
 	"fmt"
 	"regexp"
 	"slices"
@@ -16,27 +18,26 @@ type Note struct {
 var versionRe = regexp.MustCompile(`^## \[?v?(\d+\.\d+\.\d+)`)
 
 // Notes splits a CHANGELOG into versions in file order (newest first as release-please writes
-// it). A "## " heading that is not a version is skipped with its text; a version without a
-// "### Running sessions" subsection is an error (R-SYNC-089).
+// it). A "## " heading that is not a version is skipped with its text. A version without a
+// "### Running sessions" subsection is an error (R-SYNC-089); the notes still hold every version,
+// so a reader that needs only some of them (the worker's update item) can go on.
 func Notes(changelog string) ([]Note, error) {
 	var out []Note
+	var errs []error
 	var cur *Note
-	flush := func() error {
+	flush := func() {
 		if cur == nil {
-			return nil
+			return
 		}
 		if !strings.Contains(cur.Body, "### Running sessions") {
-			return fmt.Errorf("CHANGELOG %s has no \"### Running sessions\" subsection", cur.Version)
+			errs = append(errs, fmt.Errorf("CHANGELOG %s has no \"### Running sessions\" subsection", cur.Version))
 		}
 		out = append(out, Note{Version: cur.Version, Body: strings.TrimSpace(cur.Body) + "\n"})
 		cur = nil
-		return nil
 	}
 	for _, l := range strings.Split(changelog, "\n") {
 		if strings.HasPrefix(l, "## ") {
-			if err := flush(); err != nil {
-				return nil, err
-			}
+			flush()
 			if m := versionRe.FindStringSubmatch(l); m != nil {
 				cur = &Note{Version: m[1]}
 			}
@@ -46,12 +47,14 @@ func Notes(changelog string) ([]Note, error) {
 			cur.Body += l + "\n"
 		}
 	}
-	return out, flush()
+	flush()
+	return out, errors.Join(errs...)
 }
 
 // Between returns the notes of the versions after from and up to to, sorted oldest first
-// (R-SYNC-032); none when they are equal (R-SYNC-033) or to is older. A prerelease sorts below
-// its release; a version that is not X.Y.Z[-pre] is an error.
+// (R-SYNC-032); none when they are equal (R-SYNC-033) or to is older. A prerelease bound counts
+// as its release: binary X.Y.Z-rc.N prints the X.Y.Z notes, and a lock of X.Y.Z-rc.N does not
+// print them again. A version that is not X.Y.Z[-pre] is an error.
 func Between(notes []Note, from, to string) ([]Note, error) {
 	f, err := parseVersion(from)
 	if err != nil {
@@ -61,6 +64,7 @@ func Between(notes []Note, from, to string) ([]Note, error) {
 	if err != nil {
 		return nil, err
 	}
+	f.pre, t.pre = nil, nil
 	type item struct {
 		n Note
 		v version
@@ -71,19 +75,11 @@ func Between(notes []Note, from, to string) ([]Note, error) {
 		if err != nil {
 			return nil, err
 		}
-		if f.less(v) && !t.less(v) {
+		if f.cmp(v) < 0 && t.cmp(v) >= 0 {
 			in = append(in, item{n, v})
 		}
 	}
-	slices.SortFunc(in, func(a, b item) int {
-		switch {
-		case a.v.less(b.v):
-			return -1
-		case b.v.less(a.v):
-			return 1
-		}
-		return 0
-	})
+	slices.SortFunc(in, func(a, b item) int { return a.v.cmp(b.v) })
 	out := make([]Note, len(in))
 	for i, x := range in {
 		out[i] = x.n
@@ -91,9 +87,37 @@ func Between(notes []Note, from, to string) ([]Note, error) {
 	return out, nil
 }
 
+// RunningSessions returns the body of n's "### Running sessions" subsection, trimmed: the text
+// up to the next "### " heading or the end.
+func RunningSessions(n Note) string {
+	_, after, ok := strings.Cut(n.Body, "### Running sessions\n")
+	if !ok {
+		return ""
+	}
+	if i := strings.Index(after, "\n### "); i >= 0 {
+		after = after[:i]
+	}
+	return strings.TrimSpace(after)
+}
+
+// Compare orders two versions by SemVer 2.0 precedence (-1, 0 or 1): a prerelease sorts below
+// its release, digit-only prerelease identifiers compare as numbers, build metadata is ignored.
+// A leading "v" is allowed; a version that is not X.Y.Z[-pre][+build] is an error.
+func Compare(a, b string) (int, error) {
+	va, err := parseVersion(a)
+	if err != nil {
+		return 0, err
+	}
+	vb, err := parseVersion(b)
+	if err != nil {
+		return 0, err
+	}
+	return va.cmp(vb), nil
+}
+
 type version struct {
 	num [3]int
-	pre string
+	pre []string
 }
 
 var semverRe = regexp.MustCompile(`^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+.*)?$`)
@@ -103,30 +127,49 @@ func parseVersion(s string) (version, error) {
 	if m == nil {
 		return version{}, fmt.Errorf("version %q is not X.Y.Z", s)
 	}
-	v := version{pre: m[4]}
+	var v version
+	if m[4] != "" {
+		v.pre = strings.Split(m[4], ".")
+	}
 	for i := range 3 {
 		v.num[i], _ = strconv.Atoi(m[i+1]) //nolint:errcheck // the regexp matched digits
 	}
 	return v, nil
 }
 
-// less orders by number, then a prerelease below its release (ponytail: prereleases compare as
-// plain strings, not by semver identifier rules).
-func (a version) less(b version) bool {
-	if a.num != b.num {
-		for i := range 3 {
-			if a.num[i] != b.num[i] {
-				return a.num[i] < b.num[i]
-			}
-		}
+func (a version) cmp(b version) int {
+	if c := slices.Compare(a.num[:], b.num[:]); c != 0 {
+		return c
 	}
 	switch {
-	case a.pre == b.pre:
-		return false
-	case a.pre == "":
-		return false
-	case b.pre == "":
-		return true
+	case len(a.pre) == 0 && len(b.pre) == 0:
+		return 0
+	case len(a.pre) == 0:
+		return 1
+	case len(b.pre) == 0:
+		return -1
 	}
-	return a.pre < b.pre
+	for i := range min(len(a.pre), len(b.pre)) {
+		if c := cmpIdent(a.pre[i], b.pre[i]); c != 0 {
+			return c
+		}
+	}
+	return cmp.Compare(len(a.pre), len(b.pre))
 }
+
+// cmpIdent orders two prerelease identifiers: numbers numerically and below any alphanumeric.
+func cmpIdent(a, b string) int {
+	an, bn := digits(a), digits(b)
+	switch {
+	case an && bn:
+		return cmp.Or(cmp.Compare(len(strings.TrimLeft(a, "0")), len(strings.TrimLeft(b, "0"))),
+			strings.Compare(strings.TrimLeft(a, "0"), strings.TrimLeft(b, "0")))
+	case an:
+		return -1
+	case bn:
+		return 1
+	}
+	return strings.Compare(a, b)
+}
+
+func digits(s string) bool { return s != "" && strings.Trim(s, "0123456789") == "" }

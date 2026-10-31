@@ -233,7 +233,8 @@ Cut table), §6 (runtime files), §13 (items 1–2), §14 (wake rules), §15 (no
   the line layout MUST be frozen by golden tests.
   Verify: unit — 59 s → `0m`, 3 h 10 m → `3h`, 50 h → `2d`; golden inbox output.
 - **R-MSG-046** The store MUST carry a schema version and apply forward-only versioned migrations
-  automatically on open; a store newer than the binary MUST be refused.
+  automatically on open, after the backup of R-UPD-010; a store newer than the binary MUST be
+  refused.
   Verify: unit — a v1 store fixture opens with a v2 binary and is migrated; a newer store → exit 4.
 - **R-MSG-047** `ness inbox` run outside a session (no `NESS_SESSION`) MUST list operator items.
   Verify: testscript — root sends `--to operator`; `inbox` with no session env lists it.

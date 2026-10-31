@@ -9,7 +9,6 @@ import (
 	"regexp"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
 
@@ -64,7 +63,8 @@ Waiting rule: pull once, then end your turn; the worker wakes you when something
 // newHookCmd is the entry point of the client hooks (R-HOOK-002, R-HOOK-016, R-CFG-053). Outside
 // a ness project, without NESS_SESSION, for a session the store does not know, or for an event
 // this binary does not know, the result is a silent exit 0: a contributor's client must never see ness fail.
-// The one exception is session-start for the operator in a ness project, which prints the unbound note.
+// Two exceptions: session-start for the operator in a ness project prints the unbound note, and
+// a skew inside a ness session blocks loudly (R-UPD-020..022).
 func newHookCmd(d Deps) *cobra.Command {
 	return &cobra.Command{
 		Use:   "hook EVENT",
@@ -76,6 +76,9 @@ func newHookCmd(d Deps) *cobra.Command {
 			}
 			start := args[0] == "session-start"
 			b, st := bind(d, start)
+			if st == bindSkew {
+				return skewHook(d, b.skew, start)
+			}
 			if st == bindOperator && start {
 				say(d.Stdout, "%s", unboundNote(noteSizes(d, b.p))) // R-HOOK-019
 			}
@@ -100,6 +103,8 @@ type bound struct {
 	p *project
 	s *store.Store
 	c caller
+	// skew is the one line a bindSkew hook prints (R-UPD-020).
+	skew string
 }
 
 // bindState is the outcome of bind.
@@ -114,29 +119,33 @@ const (
 	// bindOperator: the ness project loaded and the caller is the operator; only bound.p is set
 	// and the store is closed.
 	bindOperator
+	// bindSkew: inside a ness session the project or store cannot run under this binary; only
+	// bound.skew is set (R-UPD-020).
+	bindSkew
 )
 
 // bind resolves the session a hook runs for: NESS_SESSION, or the root adopted by the
-// conversation CLAUDE_CODE_SESSION_ID (R-SESS-114). Any failure (no identity, no ness project, a
-// pin mismatch, a newer store, a session the store does not know) means the client is not bound
-// here and the hook stays silent (R-HOOK-002, R-CFG-053). The next ness command the session
-// runs reports the cause loudly. An operator in a loaded project is reported apart as
+// conversation CLAUDE_CODE_SESSION_ID (R-SESS-114). Inside a ness session (inSession) a pin
+// mismatch, a newer store or a config that does not parse is bindSkew, checked before the session
+// lookup so any session id sees it (R-UPD-020). Any other failure, and any failure outside a
+// session, means the client is not bound here and the hook stays silent (R-HOOK-002, R-CFG-053,
+// R-UPD-023). An operator in a loaded project is reported apart as
 // bindOperator, so a caller can tell that case from every other unbound one. Without any identity
 // variable bind returns at once, unless always asks it to load the project anyway (session-start,
 // for the unbound note).
 // ponytail: every call spawns git rev-parse twice and opens SQLite; cache the store path per
 // process or per session if pre-tool latency shows up once the worker adds load (P4).
 func bind(d Deps, always bool) (bound, bindState) {
-	if !always && d.Session == store.Operator && d.Conversation == "" {
+	if !always && d.Session == store.Operator && d.Conversation == "" && !onSessionBranch(d) {
 		return bound{}, bindUnbound
 	}
 	p, err := loadProject(d)
 	if err != nil {
-		return bound{}, bindUnbound //nolint:nilerr // fail open: the hook is silent when unbound
+		return unboundOrSkew(d, err)
 	}
 	s, c, err := openStore(d, p)
 	if err != nil {
-		return bound{}, bindUnbound //nolint:nilerr // fail open: the hook is silent when unbound
+		return unboundOrSkew(d, err)
 	}
 	if c.operator() {
 		if cerr := s.Close(); cerr != nil {
@@ -145,6 +154,56 @@ func bind(d Deps, always bool) (bound, bindState) {
 		return bound{p: p}, bindOperator
 	}
 	return bound{p: p, s: s, c: c}, bindBound
+}
+
+// unboundOrSkew is bind's answer to a failure: bindSkew for a skew inside a ness session,
+// bindUnbound for anything else.
+func unboundOrSkew(d Deps, err error) (bound, bindState) {
+	var pe *config.PinError
+	var ce *config.ParseError
+	if (errors.As(err, &pe) || errors.As(err, &ce) || errors.Is(err, store.ErrNewer)) && inSession(d) {
+		return bound{skew: skewLine(err)}, bindSkew
+	}
+	return bound{}, bindUnbound
+}
+
+// inSession reports a ness session: NESS_SESSION is set or the branch is a session branch.
+func inSession(d Deps) bool { return d.Session != store.Operator || onSessionBranch(d) }
+
+// onSessionBranch reports whether the working directory's branch is session/*: one git call,
+// no store read, so an adopted root is a session even when its store does not open (R-UPD-020).
+func onSessionBranch(d Deps) bool {
+	out, err := d.exec()("", "git", "symbolic-ref", "-q", "--short", "HEAD")
+	return err == nil && strings.HasPrefix(string(out), "session/")
+}
+
+// skewLine is the one line naming a skew's cause and its fix (R-UPD-020). The pin fix is
+// PinError.Fix(), never a second copy (R-CFG-013); anything else not a pin or newer store is the
+// config's.
+func skewLine(err error) string {
+	cause, fix := err.Error(), "correct .ness/ness.toml"
+	var pe *config.PinError
+	switch {
+	case errors.As(err, &pe):
+		cause, fix = pe.Error(), pe.Fix()
+	case errors.Is(err, store.ErrNewer):
+		// store.Open's own fix ("upgrade ness") gives way to the one below.
+		cause, fix = strings.TrimSuffix(cause, "; upgrade ness"), "ness self-update (ness doctor shows the rollback)"
+	}
+	return fmt.Sprintf("hooks cannot run in this session: %s; fix: %s", cause, fix)
+}
+
+// skewHook answers a hook under skew: session-start prints the line (R-UPD-022); pre-tool blocks
+// with it every call but one plain ness command, and a payload that does not parse (R-UPD-021).
+func skewHook(d Deps, skew string, start bool) error {
+	if start {
+		say(d.Stdout, "ness: %s", skew)
+		return nil
+	}
+	if p, err := hook.Parse(d.Stdin); err == nil && hook.NessCommand(p) {
+		return nil
+	}
+	return block(skew)
 }
 
 // block is the client's blocking response: exit 2 with the reason on stderr (R-HOOK-014).
@@ -162,8 +221,11 @@ func preTool(d Deps, b bound) error {
 		return block(reason)
 	}
 	cfg, err := projectConfig(d, b.p)
-	if err != nil {
-		return nil //nolint:nilerr // an unreadable config is reported by the next command, not by a blocked tool
+	if err != nil { // profiles that do not resolve are a skew inside a session (R-UPD-020)
+		if hook.NessCommand(p) {
+			return nil
+		}
+		return block(skewLine(err))
 	}
 	if serr := spawnGuard(d, b, cfg, p); serr != nil {
 		return serr
@@ -249,6 +311,11 @@ func sessionStart(d Deps, b bound) error {
 	if err != nil {
 		p = hook.Payload{} // an unreadable payload is a plain startup: identity still loads
 	}
+	cfg, cerr := projectConfig(d, b.p)
+	if cerr != nil { // profiles that do not resolve are a skew, as in preTool (R-UPD-022)
+		say(d.Stdout, "ness: %s", skewLine(cerr))
+		return nil
+	}
 	if primary, perr := primaryRoot(b.p); perr == nil {
 		serr := session.CheckShadowing(filepath.Join(primary, ".agents", "skills"), skillRoots())
 		if errors.Is(serr, session.ErrShadowed) {
@@ -266,11 +333,9 @@ func sessionStart(d Deps, b bound) error {
 	if gerr != nil {
 		sess = b.c.sess
 	}
-	timeout := time.Minute
-	if cfg, cerr := b.p.file.Config(nil); cerr == nil {
-		timeout = cfg.Launch.ReadyTimeout.Duration
-	}
-	say(d.Stdout, "%s", identityLine(sess, session.Shown(sess, now, timeout)))
+	say(d.Stdout, "%s", identityLine(sess, session.Shown(sess, now, cfg.Launch.ReadyTimeout.Duration)))
+	sayRootNotices(d, b.p, sess, cfg)
+	sayBehindBase(d, b.p, sess)
 	compact := p.Source == "compact"
 	if compact {
 		say(d.Stdout, "After compaction: re-read your brief and your inbox first.")
@@ -282,6 +347,16 @@ func sessionStart(d Deps, b bound) error {
 		}
 	}
 	return markErr
+}
+
+// sayRootNotices prints rootNotices for a root; a child gets none (R-UPD-053).
+func sayRootNotices(d Deps, p *project, sess store.Session, cfg *config.Config) {
+	if sess.Parent != store.Operator {
+		return
+	}
+	for _, line := range rootNotices(d, p, cfg) {
+		say(d.Stdout, "%s", line)
+	}
 }
 
 // identityLine is the session-start identity; a root's size rides before the phase, a child has

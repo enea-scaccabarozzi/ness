@@ -11,7 +11,7 @@ their `[config]` table; a value in `ness.toml` wins.
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `ness` | string, required | none | The version pin, `"MAJOR.MINOR"`. `"0.1"` accepts any `0.1.x` binary. |
+| `ness` | string, required | none | The version pin, `"MAJOR.MINOR"`. `"0.2"` accepts `0.2.x` and `0.3.x` binaries; `"1.2"` accepts `1.2` and any later `1.x`. `ness upgrade` sets it. See [Compatibility](../concepts/compatibility.md). |
 | `project` | string, required | The repository directory name, at `ness init` | The project name. It names the worker unit and the secrets file. |
 | `base` | string, required | none | The base branch for roots and their integration |
 | `gate` | string, required | none | The gate command `ness integrate` runs once per fold |
@@ -122,6 +122,23 @@ A session cannot edit these keys, `[tiers]` or `[worker]` with Edit, Write or Mu
 |---|---|---|---|
 | `stall_minutes` | integer | `30` | Idle minutes with open work before the worker sends one stall report to the session's manager. If nothing reaches the session in the next `stall_minutes`, your phone is told. |
 | `quiet_seconds` | integer | `60` | Seconds after a prompt box last changed before the worker types into it |
+
+## `[update]`
+
+How this machine hears about new releases (R-UPD-030). The binary is shared, so the worker
+installs on its own only when every registered project says `install`.
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `check` | bool | `true` | The worker and `ness doctor` check the release source, at most once per 24 h per machine. `false`: no network, and no result shown. |
+| `channel` | string | `"stable"` | `stable` or `rc`. The channel `ness self-update` installs from, and the one the check reports. `rc` also offers a newer stable release. |
+| `auto` | string | `"notify"` | `off`, `notify` or `install`. `notify`: `ness doctor` and the root's session-start show a newer release. `off`: they show nothing, and the worker still checks. `install`: the worker installs it and runs `ness upgrade` at the idle point. |
+
+A value outside its set is refused, naming the key and the accepted values:
+
+```text title="Output (exit 4)"
+ness: .ness/ness.toml: update.channel = "beta": accepted values are stable, rc
+```
 
 ## `[[guards]]`
 

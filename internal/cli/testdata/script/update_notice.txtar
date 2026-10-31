@@ -1,0 +1,157 @@
+# The daily update check: doctor fetches only when [update] check is on and the cache is older than
+# 24 h and shows an `update` line; a root's session-start prints the available line from the cache
+# alone (hooks never fetch), a child's prints none; auto = "off" and check = false hide the result;
+# nothing goes to a channel or an inbox; an empty cache directory writes nothing.
+# covers: R-UPD-050, R-UPD-051, R-UPD-052, R-UPD-053
+cd repo
+env XDG_CACHE_HOME=$HOME/.cache
+env NESS_TEST_NOW=2026-10-08T10:00:00Z
+exec ness init --gate true --base main --yes
+cp .ness/ness.toml ../base.toml
+exec git add -A
+exec git commit -q -m 'ness init'
+
+# No cache yet: doctor fetches once. Release 0.2.0, installed 0.1.0.
+# rejects: a doctor that never fetches, a missing update line, a wrong fix text
+releases 0.2.0
+exits 1 ness doctor
+stdout '^warn\tupdate\tness 0\.2\.0 available \(installed 0\.1\.0\)\tfix: ness self-update'
+# rejects: a fetch that is not cached
+exists $HOME/.cache/ness/update.json
+grep '"stable": ?"0\.2\.0"' $HOME/.cache/ness/update.json
+grep -count=1 '^GET /releases' $WORK/releases.log
+
+# Within 24 h the cache answers: a server that fails every request sees no request.
+# rejects: a doctor that fetches on every run
+releases fail
+exits 1 ness doctor
+stdout '^warn\tupdate\tness 0\.2\.0 available \(installed 0\.1\.0\)\tfix: ness self-update'
+cmp $WORK/releases.log $WORK/empty
+
+# A root's session-start prints the line from the cache; the server stays untouched (R-UPD-051).
+# rejects: a hook that fetches, or one that reads no cache, or a different wording
+store add-session s-r r
+store add-session s-c c s-r
+env NESS_SESSION=s-r
+stdin ../startup.json
+exec ness hook session-start
+stdout '^ness 0\.2\.0 available \(installed 0\.1\.0\): ness self-update$'
+cmp $WORK/releases.log $WORK/empty
+# rejects: the line in a child's session-start
+env NESS_SESSION=s-c
+stdin ../startup.json
+exec ness hook session-start
+! stdout 'available'
+cmp $WORK/releases.log $WORK/empty
+# rejects: the notice posted to the operator's or the root's inbox, or to a channel
+store items operator 0
+store items s-r 0
+! exists $WORK/.fakes/http.json
+env NESS_SESSION=
+
+# Past 24 h doctor fetches again and rewrites the cache; the next hook reads it with the server down.
+# rejects: a stale cache that is never refreshed; a hook that needs the server
+env NESS_TEST_NOW=2026-10-09T11:00:00Z
+releases 0.3.0
+exits 1 ness doctor
+stdout '^warn\tupdate\tness 0\.3\.0 available \(installed 0\.1\.0\)'
+grep -count=1 '^GET /releases' $WORK/releases.log
+grep '"stable": ?"0\.3\.0"' $HOME/.cache/ness/update.json
+releases fail
+env NESS_SESSION=s-r
+stdin ../startup.json
+exec ness hook session-start
+stdout '^ness 0\.3\.0 available \(installed 0\.1\.0\): ness self-update$'
+cmp $WORK/releases.log $WORK/empty
+env NESS_SESSION=
+
+# Installed equal to the newest: ok. (doctor fails other checks on the pin, only the line matters)
+# rejects: a warn when nothing newer is offered
+env NESS_TEST_VERSION=0.3.0
+exits 1 ness doctor
+stdout '^ok\tupdate\tness 0\.3\.0 is the latest on channel stable'
+env NESS_TEST_VERSION=
+
+# auto = "off" hides the result in doctor and the hook, and the cache stays fresh so nothing is fetched.
+# rejects: auto = off that still prints the line
+exec sh -c 'cat ../base.toml ../auto-off.toml > .ness/ness.toml'
+exec git commit -q -am 'auto off'
+exits 1 ness doctor
+stdout '^ok\tupdate\tcheck off'
+! stdout 'available'
+env NESS_SESSION=s-r
+stdin ../startup.json
+exec ness hook session-start
+! stdout 'available'
+env NESS_SESSION=
+cmp $WORK/releases.log $WORK/empty
+
+# check = false: no network even with a stale cache, a line that says off, no hook line, cache untouched.
+# rejects: a check = false that still fetches or still offers
+exec sh -c 'cat ../base.toml ../check-off.toml > .ness/ness.toml'
+exec git commit -q -am 'check off'
+env NESS_TEST_NOW=2026-10-12T10:00:00Z
+releases 0.4.0
+exits 1 ness doctor
+stdout '^ok\tupdate\tcheck off'
+! stdout 'available'
+cmp $WORK/releases.log $WORK/empty
+grep '"stable": ?"0\.3\.0"' $HOME/.cache/ness/update.json
+env NESS_SESSION=s-r
+stdin ../startup.json
+exec ness hook session-start
+! stdout 'available'
+env NESS_SESSION=
+cmp $WORK/releases.log $WORK/empty
+
+# A failed automatic upgrade is shown to the root and in doctor (default [update]).
+# rejects: a failure record that nothing reads, or one a child sees
+exec sh -c 'cp ../base.toml .ness/ness.toml'
+exec git commit -q -am 'defaults'
+mkdir .git/ness
+cp ../upgrade-failed.json .git/ness/upgrade-failed.json
+env NESS_SESSION=s-r
+stdin ../startup.json
+exec ness hook session-start
+stdout 'automatic upgrade to 0\.2\.0 failed: sync conflict'
+env NESS_SESSION=s-c
+stdin ../startup.json
+exec ness hook session-start
+! stdout 'automatic upgrade'
+env NESS_SESSION=
+exits 1 ness doctor
+stdout '^warn\tupdate\tautomatic upgrade'
+store items operator 0
+store items s-r 0
+rm .git/ness/upgrade-failed.json
+
+# An empty cache directory is an error: nothing is written, in the repository or anywhere.
+# rejects: a cache path that falls back to the current directory or the repository
+rm $HOME/.cache
+env NESS_TEST_NOW=2026-10-20T10:00:00Z
+releases 0.5.0
+exec git status --porcelain
+! stdout .
+env XDG_CACHE_HOME=
+env HOME=
+exec sh -c 'ness doctor; true'
+! exists update.json
+! exists $WORK/repo/update.json
+exec git status --porcelain
+! stdout .
+exec find $WORK -name 'update.json*'
+! stdout .
+
+-- empty --
+-- startup.json --
+{"hook_event_name":"SessionStart","source":"startup","session_id":"c0ffee"}
+-- auto-off.toml --
+
+[update]
+auto = "off"
+-- check-off.toml --
+
+[update]
+check = false
+-- upgrade-failed.json --
+{"version":"0.2.0","cause":"sync conflict"}

@@ -27,6 +27,7 @@ import (
 //	store items RECIPIENT N               fail unless RECIPIENT (an id or operator) lists N items
 //	store pulled RECIPIENT N              fail unless N of RECIPIENT's listed items are pulled
 //	store last RECIPIENT VAR              set $VAR to the id of RECIPIENT's newest listed item
+//	store schema VAR                      set $VAR to this binary's schema version
 //	store set-version N|current          write schema version N (current: this binary's), as a newer ness would
 //	store claim-posts all                claim every post as another live run
 //	store thread CHANNEL KEY ID          fail unless the thread of KEY on CHANNEL is ID
@@ -52,18 +53,14 @@ func storeCmd(ts *testscript.TestScript, neg bool, args []string) {
 	if len(args) < 2 {
 		ts.Fatalf("usage: store add-session|close-session|session|item|items|pulled|last|set-version ...")
 	}
+	if args[0] == "schema" {
+		ts.Setenv(args[1], strconv.Itoa(store.Version()))
+		return
+	}
 	path, err := store.Locate(ts.MkAbs("."))
 	ts.Check(err)
-	if args[0] == "set-version" { // raw: Open refuses a newer store, and may not lower one
-		db, oerr := sql.Open("sqlite", path)
-		ts.Check(oerr)
-		v := store.Version()
-		if args[1] != "current" {
-			v = wantCount(ts, args)
-		}
-		_, oerr = db.ExecContext(context.Background(), "PRAGMA user_version = "+strconv.Itoa(v))
-		ts.Check(oerr)
-		ts.Check(db.Close())
+	if args[0] == "set-version" {
+		setVersion(ts, path, args)
 		return
 	}
 	if args[0] == "fail-close" || args[0] == "allow-close" { // a trigger makes closing a row fail
@@ -372,4 +369,17 @@ func scriptNow(ts *testscript.TestScript) time.Time {
 		return t
 	}
 	return time.Now()
+}
+
+// setVersion writes the schema version raw: Open refuses a newer store, and may not lower one.
+func setVersion(ts *testscript.TestScript, path string, args []string) {
+	db, err := sql.Open("sqlite", path)
+	ts.Check(err)
+	v := store.Version()
+	if args[1] != "current" {
+		v = wantCount(ts, args)
+	}
+	_, err = db.ExecContext(context.Background(), "PRAGMA user_version = "+strconv.Itoa(v))
+	ts.Check(err)
+	ts.Check(db.Close())
 }

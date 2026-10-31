@@ -182,12 +182,12 @@ func privateWords(t *testing.T) []string {
 
 // publicTree loads the repository into memory, binaries included, without what is never
 // published: the private docs/discovery and .private, git's own data, dependencies, the site's
-// build output and session worktrees. Symlinks are skipped; their targets are read in place.
+// build output, session worktrees and the gitignored subagent scratch. Symlinks are skipped; their targets are read in place.
 func publicTree(t *testing.T, repo fs.FS) fstest.MapFS {
 	t.Helper()
 	skip := map[string]bool{
 		"docs/discovery": true, ".private": true, ".git": true, ".worktrees": true,
-		".claude/worktrees": true, "site/.next": true, "site/out": true, "site/.source": true,
+		".claude/worktrees": true, ".superpowers/sdd": true, "site/.next": true, "site/out": true, "site/.source": true,
 	}
 	tree := fstest.MapFS{}
 	err := fs.WalkDir(repo, ".", func(p string, d fs.DirEntry, err error) error {
@@ -262,5 +262,18 @@ func TestPublicTreeDenylist(t *testing.T) {
 	words := privateWords(t)
 	if hits := profiles.Scan(publicTree(t, os.DirFS("..")), words); len(hits) > 0 {
 		t.Errorf("private denylist in the public tree: %v", hits)
+	}
+}
+
+func TestPublicTreeHomePath(t *testing.T) {
+	// The repository names no real home directory: the user running the test stands in for
+	// whoever wrote the tree, so a path copied from a terminal fails here (R-QA-048).
+	// covers: R-QA-048
+	home, err := os.UserHomeDir()
+	if err != nil || strings.Count(home, "/") < 2 {
+		t.Skip("no home directory deeper than /x")
+	}
+	if hits := profiles.Scan(publicTree(t, os.DirFS("..")), []string{home + "/"}); len(hits) > 0 {
+		t.Errorf("home path in the public tree: %v", hits)
 	}
 }

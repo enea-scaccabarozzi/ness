@@ -33,6 +33,7 @@ acceptance tests for it are frozen (D33).
 | [profiles-builtin.md](profiles-builtin.md) | BLT | P6 | core skill text and the five built-in profiles |
 | [ui.md](ui.md) | UI | cli-ux | plain and rich renderers, `--ui`, colour, `status --watch` |
 | [quality.md](quality.md) | QA | P1/P6 | ness's own repository quality gate |
+| [update.md](update.md) | UPD | update-path | releases, install, self-update, upgrade, compatibility |
 | [resolutions.md](resolutions.md) | — | — | trail of resolved open points (OP-id → resolution) |
 
 ## Requirement format

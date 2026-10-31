@@ -2,6 +2,7 @@ package systemd_test
 
 import (
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -221,5 +222,51 @@ func TestAvailableMentionsLinger(t *testing.T) {
 	err := (systemd.Supervisor{Exec: r.exec}).Available()
 	if err == nil || !strings.Contains(err.Error(), "loginctl enable-linger $USER") {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+// writeUnit writes a unit file at path, creating its directory.
+func writeUnit(t *testing.T, path, unit string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(unit), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Rejects an ExecBinary that cannot tell a missing unit from a broken one, or that splits a
+// quoted path at its blank.
+func TestExecBinary(t *testing.T) {
+	home := t.TempDir()
+	s := systemd.Supervisor{Home: home}
+	if _, err := s.ExecBinary("p"); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatal(err)
+	}
+	writeUnit(t, s.UnitPath("p"), systemd.Unit("p", "/opt/my bin/ness", "/w", "/usr/bin"))
+	if got, err := s.ExecBinary("p"); err != nil || got != "/opt/my bin/ness" {
+		t.Fatal(got, err)
+	}
+	writeUnit(t, s.UnitPath("p"), "[Service]\nRestart=always\n")
+	if got, err := s.ExecBinary("p"); err == nil || errors.Is(err, fs.ErrNotExist) {
+		t.Fatal(got, err)
+	}
+}
+
+// Rejects a EnvPATH that loses the install-time PATH (a re-point would then write the caller's),
+// that keeps Unit's %% escaping, or that invents a PATH for a unit that sets none.
+func TestEnvPATH(t *testing.T) {
+	s := systemd.Supervisor{Home: t.TempDir()}
+	if _, err := s.EnvPATH("p"); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatal(err)
+	}
+	writeUnit(t, s.UnitPath("p"), systemd.Unit("p", "/opt/ness", "/w", `/home/u/.local/bin:/opt/a "b"%c:/usr/bin`))
+	if got, err := s.EnvPATH("p"); err != nil || got != `/home/u/.local/bin:/opt/a "b"%c:/usr/bin` {
+		t.Fatalf("EnvPATH = %q, %v", got, err)
+	}
+	writeUnit(t, s.UnitPath("p"), systemd.Unit("p", "/opt/ness", "/w", ""))
+	if got, err := s.EnvPATH("p"); err != nil || got != "" {
+		t.Fatalf("EnvPATH without Environment = %q, %v", got, err)
 	}
 }

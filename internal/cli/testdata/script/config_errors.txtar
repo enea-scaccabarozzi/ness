@@ -1,5 +1,5 @@
 # A broken or invalid ness.toml is refused (exit 4), naming the position or key, and nothing is written.
-# covers: R-CFG-003, R-CFG-004, R-CFG-040, R-CFG-043
+# covers: R-CFG-003, R-CFG-004, R-CFG-040, R-CFG-043, R-UPD-030
 cd repo
 snap before
 exits 4 ness sync --check
@@ -17,6 +17,19 @@ stderr 'unknown key worker\.stal_minutes'
 cp ../no-gate.toml .ness/ness.toml
 exits 4 ness sync --check
 stderr 'gate is required'
+
+# rejects: accepting any string for update.channel, update.auto or update.check
+cp ../bad-channel.toml .ness/ness.toml
+exits 4 ness sync --check
+stderr 'update.channel = "beta": accepted values are stable, rc'
+
+cp ../bad-auto.toml .ness/ness.toml
+exits 4 ness sync --check
+stderr 'update.auto = "always": accepted values are off, notify, install'
+
+cp ../bad-check.toml .ness/ness.toml
+exits 4 ness sync --check
+stderr 'update\.check'
 
 -- repo/.ness/ness.toml --
 ness = "0.1"
@@ -41,3 +54,24 @@ stal_minutes = 5
 ness = "0.1"
 project = "p"
 base = "main"
+-- bad-channel.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "make validate"
+[update]
+channel = "beta"
+-- bad-auto.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "make validate"
+[update]
+auto = "always"
+-- bad-check.toml --
+ness = "0.1"
+project = "p"
+base = "main"
+gate = "make validate"
+[update]
+check = "yes"

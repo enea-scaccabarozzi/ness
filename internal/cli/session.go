@@ -45,7 +45,7 @@ func openStore(d Deps, p *project) (*store.Store, caller, error) {
 	}
 	s, err := store.Open(path)
 	if err != nil {
-		return nil, caller{}, refuse("%v", err)
+		return nil, caller{}, refuse("%w", err)
 	}
 	fillSizes(d, p, s)
 	c, err := identify(s, d)

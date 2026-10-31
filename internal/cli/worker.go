@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"math/rand/v2"
 	"os"
 	"os/signal"
@@ -89,7 +90,7 @@ func installWorker(d Deps) error {
 	if aerr := sup.Available(); aerr != nil {
 		return refuse("%v; run ness worker run in a terminal instead", aerr)
 	}
-	bin := realPath(executable())
+	bin := realPath(d.Executable)
 	path, err := sup.Install(env.cfg.Project, bin, env.primary, os.Getenv("PATH"))
 	if errors.Is(err, systemd.ErrForeign) {
 		return refuse("%v", err)
@@ -100,6 +101,47 @@ func installWorker(d Deps) error {
 	done(d, "installed %s (ExecStart=%s worker run); check with ness doctor or systemctl --user status %s",
 		path, bin, systemd.UnitName(env.cfg.Project))
 	return nil
+}
+
+// repointWorker points the project's unit at bin when it runs another binary (by real path),
+// keeping the unit's PATH (the caller's only when the unit has none):
+// Install rewrites it, reloads systemd and restarts the worker. No unit, or the same binary, is
+// false, nil; a caller that needs fresh code anyway calls restartWorker.
+func repointWorker(d Deps, project, primary, bin string) (changed bool, err error) {
+	sup := systemd.Supervisor{Exec: d.exec(), Home: userHome()}
+	cur, err := sup.ExecBinary(project)
+	if errors.Is(err, fs.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	bin = realPath(bin)
+	if realPath(cur) == bin {
+		return false, nil
+	}
+	path, err := sup.EnvPATH(project)
+	if err != nil {
+		return false, err
+	}
+	if path == "" {
+		path = os.Getenv("PATH")
+	}
+	if _, err = sup.Install(project, bin, primary, path); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// restartWorker restarts the project's unit so it runs the code now on disk; without a unit it
+// does nothing and reports false.
+func restartWorker(d Deps, project string) (restarted bool, err error) {
+	sup := systemd.Supervisor{Exec: d.exec(), Home: userHome()}
+	if _, serr := os.Stat(sup.UnitPath(project)); errors.Is(serr, fs.ErrNotExist) {
+		return false, nil
+	}
+	_, err = d.exec()("", "systemctl", "--user", "restart", systemd.UnitName(project)+".service")
+	return err == nil, err
 }
 
 // uninstallWorker stops and removes the unit install wrote (R-WRK-006).
@@ -222,6 +264,9 @@ func openWorker(d Deps, env workerEnv) (w *worker.Worker, lg *worker.Log, closeA
 		release()
 		return nil, nil, nil, refuse("%v", err)
 	}
+	// A live project is registered even before its first writing sync, so the ceiling and the
+	// install veto see its pin (R-UPD-031).
+	record(d, env.p)
 	lg = &worker.Log{Path: filepath.Join(dir, "worker.log"), Now: d.Now, Err: d.Stderr}
 	w = &worker.Worker{
 		Store: s, Runtime: rt,
@@ -232,6 +277,9 @@ func openWorker(d Deps, env workerEnv) (w *worker.Worker, lg *worker.Log, closeA
 		Stall: time.Duration(env.cfg.Worker.StallMinutes) * time.Minute,
 		Quiet: time.Duration(env.cfg.Worker.QuietSeconds) * time.Second,
 	}
+	bases := map[string]baseLock{}
+	w.Stale = func(sess store.Session) (worker.Stale, bool, error) { return staleLock(d, env.primary, sess, bases) }
+	w.Update = unattended(d, env, s)
 	wireProbes(d, env, s, w)
 	wireNotify(d, env, s, w)
 	return w, lg, func() { _ = s.Close(); release() }, nil //nolint:errcheck // the process ends here
@@ -283,7 +331,7 @@ func wireProbes(d Deps, env workerEnv, s *store.Store, w *worker.Worker) {
 // binaryVersion runs the binary at this process's real path (the unit's ExecStart) with
 // --version, which prints "ness version X", and returns X (R-WRK-009).
 func binaryVersion(d Deps) (string, error) {
-	out, err := d.exec()("", realPath(executable()), "--version")
+	out, err := d.exec()("", realPath(d.Executable), "--version")
 	if err != nil {
 		return "", err
 	}

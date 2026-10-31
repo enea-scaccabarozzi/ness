@@ -3,7 +3,13 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/binary"
+	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
 )
 
 // migrations[i] brings the schema from version i to i+1. Append only; a shipped entry is never
@@ -212,10 +218,14 @@ var migrations = []string{
 // Version is the schema version this binary writes.
 func Version() int { return len(migrations) }
 
+// BackupPath is the copy of the store at path taken before a migration from schema (R-UPD-010).
+func BackupPath(path string, schema int) string { return path + ".bak-v" + strconv.Itoa(schema) }
+
 // migrate brings the schema to len(migs). A current store is read and left alone: no write
-// lock, so the hot path of every hook never contends. Otherwise the work runs in one immediate
-// transaction that re-reads the version, so concurrent first openers serialize and the second
-// one finds the work done. A newer store is refused.
+// lock, so the hot path of every hook never contends. An older, non-fresh store is first copied
+// to BackupPath (R-UPD-010); a failed copy refuses the migration. Then the work runs in one
+// immediate transaction that re-reads the version, so concurrent first openers serialize and the
+// second one finds the work done. A newer store is refused.
 func (s *Store) migrate(migs []string) error {
 	v, err := s.version()
 	if err != nil {
@@ -223,6 +233,12 @@ func (s *Store) migrate(migs []string) error {
 	}
 	if v == len(migs) {
 		return nil
+	}
+	if 0 < v && v < len(migs) {
+		if err = s.backup(v); err != nil {
+			return fmt.Errorf("store: back up schema %d before migrating: %w", v, err)
+		}
+		defer pruneBackups(s.path, v)
 	}
 	return s.inTx(func(tx *sql.Tx) error {
 		var cur int
@@ -246,4 +262,67 @@ func (s *Store) version() (int, error) {
 	var v int
 	err := s.db.QueryRowContext(context.Background(), "PRAGMA user_version").Scan(&v)
 	return v, err
+}
+
+// backup copies the store to BackupPath(path, v) through a temp file in the same directory, so a
+// stale file of that name is replaced atomically. VACUUM INTO cannot run inside a transaction, so
+// a concurrent opener may migrate first: a copy whose schema is not v is dropped, never renamed.
+func (s *Store) backup(v int) error {
+	dst := BackupPath(s.path, v)
+	tmp, err := os.CreateTemp(filepath.Dir(dst), filepath.Base(dst)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	name := tmp.Name()
+	defer func() { _ = os.Remove(name) }() //nolint:errcheck // a no-op once renamed
+	if cerr := tmp.Close(); cerr != nil {
+		return cerr
+	}
+	// VACUUM INTO accepts an existing empty file; the bound parameter needs no SQL quoting.
+	if _, err = s.db.ExecContext(context.Background(), "VACUUM INTO ?", name); err != nil {
+		return err
+	}
+	got, err := fileSchema(name)
+	if err != nil || got != v {
+		return err
+	}
+	return os.Rename(name, dst)
+}
+
+// fileSchema reads user_version from the header of a database file with no WAL: the big-endian
+// 32-bit integer at offset 60.
+func fileSchema(path string) (int, error) {
+	f, err := os.Open(path) //nolint:gosec // the temp copy this process just wrote
+	if err != nil {
+		return 0, err
+	}
+	var hdr [64]byte
+	_, err = f.ReadAt(hdr[:], 0)
+	return int(binary.BigEndian.Uint32(hdr[60:])), errors.Join(err, f.Close())
+}
+
+// pruneBackups keeps BackupPath(path, v) and the newest backup below it and removes every other
+// bak-v<N> (R-UPD-011). Temp copies of concurrent openers do not parse as a schema and are left
+// alone. Failures are ignored: a leftover backup costs only disk.
+func pruneBackups(path string, v int) {
+	entries, _ := os.ReadDir(filepath.Dir(path)) //nolint:errcheck // nothing listed, nothing pruned
+	prefix := filepath.Base(path) + ".bak-v"
+	below := -1
+	schemas := map[string]int{}
+	for _, e := range entries {
+		rest, found := strings.CutPrefix(e.Name(), prefix)
+		n, err := strconv.Atoi(rest)
+		if !found || err != nil {
+			continue
+		}
+		schemas[e.Name()] = n
+		if n < v && n > below {
+			below = n
+		}
+	}
+	for name, n := range schemas {
+		if n != v && n != below {
+			_ = os.Remove(filepath.Join(filepath.Dir(path), name)) //nolint:errcheck // see above
+		}
+	}
 }

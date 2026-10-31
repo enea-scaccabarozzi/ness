@@ -44,8 +44,8 @@ grep 'Not asked yet' .agents/skills/ness-program/SKILL.md
 grep '^- \*\*bands\*\*' .agents/skills/ness-program/SKILL.md
 grep 'Asked per program run' .agents/skills/ness-program/SKILL.md
 # The command list is the same eighteen.
-exec sh -c 'ness --help | sed -n "/^Available Commands:/,/^$/p" | grep -E "^  [a-z]+ " | awk "{print \$1}" | sort | tr "\n" " "'
-stdout '^close contract doctor hook inbox init integrate open pick post probe reply secret send size stats status sync worker $'
+exec sh -c 'ness --help | sed -n "/^Available Commands:/,/^$/p" | grep -E "^  [a-z-]+ " | awk "{print \$1}" | sort | tr "\n" " "'
+stdout '^close contract doctor hook inbox init integrate open pick post probe reply secret self-update send size stats status sync upgrade worker $'
 # A local set replaces both single slots.
 exec sh -c 'sed -i "s/^profiles = .*/profiles = [\"program\", \"local\"]/" .ness/ness.toml'
 exec ness sync

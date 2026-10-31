@@ -29,7 +29,7 @@ func TestPackageLayout(t *testing.T) {
 		".", // the root package embeds CHANGELOG.md (R-SYNC-089)
 		"cmd/ness", "internal/cli", "internal/config", "internal/sync", "internal/profile",
 		"internal/store", "internal/session", "internal/worker", "internal/probe", "internal/stats",
-		"internal/testkit", "internal/hook", "internal/notify", "internal/shell", "internal/ui", "internal/rule", "internal/check", "internal/ladder", "profiles",
+		"internal/testkit", "internal/hook", "internal/notify", "internal/shell", "internal/ui", "internal/rule", "internal/check", "internal/ladder", "internal/update", "profiles",
 	}
 	err := filepath.WalkDir("../..", func(p string, d fs.DirEntry, err error) error {
 		if err != nil {

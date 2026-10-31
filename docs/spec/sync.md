@@ -97,12 +97,14 @@ Package: `internal/sync`, cli `sync`. Sources: §3 (writing into projects), §5 
   Verify: testscript — JSON with one entry per path and its action.
 - **R-SYNC-032** `ness sync` MUST print the release notes of every version between the lock's
   recorded binary version (exclusive) and the running binary (inclusive), including each
-  version's "running sessions" instructions.
+  version's "running sessions" instructions. A binary `X.Y.Z-rc.N` counts as X.Y.Z for the upper
+  bound, and a lock of `X.Y.Z-rc.N` counts as X.Y.Z for the lower bound.
   Verify: testscript — lock records 0.3.0, binary 0.3.2; stdout contains the 0.3.1 and 0.3.2
-  notes in order and their "running sessions" section; none for 0.3.0.
+  notes in order and their "running sessions" section; none for 0.3.0. Lock 0.1.0, binary
+  0.2.0-rc.1 → the 0.2.0 notes are printed; lock 0.2.0-rc.1, binary 0.2.0 → no notes.
 - **R-SYNC-033** `ness sync` MUST NOT print release notes when the lock's version equals the
   binary's.
-  Verify: testscript — second sync prints no notes.
+  Verify: testscript — second sync prints no notes; lock 0.2.0-rc.1, binary 0.2.0 → no notes.
 
 ## Managed Markdown blocks
 
@@ -202,8 +204,10 @@ Package: `internal/sync`, cli `sync`. Sources: §3 (writing into projects), §5 
 - **R-SYNC-071** `.ness/lock.json` MUST record, per file, block and key, the owner and the hash,
   plus the binary version and profile versions, with all keys and arrays sorted.
   Verify: unit — lock written from a shuffled plan is byte-identical to one from a sorted plan.
-- **R-SYNC-072** Sync MUST NOT write any file outside the repository.
-  Verify: testscript — `$HOME` snapshot unchanged after sync.
+- **R-SYNC-072** Sync MUST NOT write any file outside the repository except the machine registry
+  file `$XDG_CONFIG_HOME/ness/projects` (R-UPD-031).
+  Verify: testscript — `$HOME` snapshot unchanged except `$XDG_CONFIG_HOME/ness/projects`; no
+  other file (no lock file) appears.
 - **R-SYNC-073** The lock reader MUST NOT panic on any input and MUST refuse a lock that does
   not parse, naming it.
   Verify: fuzz — arbitrary bytes for lock.json.
@@ -238,5 +242,6 @@ Package: `internal/sync`, cli `sync`. Sources: §3 (writing into projects), §5 
 - **R-SYNC-088** A lock with an unknown schema version MUST be refused.
   Verify: testscript — `"schema": 2` → exit 4.
 - **R-SYNC-089** Release notes MUST be embedded in the binary from `CHANGELOG.md`, each version
-  with a "Running sessions" subsection, which sync prints with the notes (R-SYNC-032).
+  with a "Running sessions" subsection, which sync prints with the notes (R-SYNC-032). The
+  worker's update item quotes the same Running-sessions subsections (R-UPD-070).
   Verify: unit — the embedded notes equal the CHANGELOG sections; each has the subsection.

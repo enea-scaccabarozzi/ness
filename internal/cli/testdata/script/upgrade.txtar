@@ -1,0 +1,221 @@
+# ness upgrade sets the pin to the binary's major.minor, runs sync (lock and release notes),
+# commits everything as chore(ness): upgrade to X.Y.Z and never pushes; a second run is a no-op;
+# it runs on a pin two minors behind; it restarts the worker, re-pointing a unit on another
+# binary; a sync conflict stops it before the commit with exit 3.
+# covers: R-UPD-061, R-UPD-062, R-UPD-063, R-CFG-010, R-CFG-011
+fake output 'systemctl --user daemon-reload' ''
+fake output 'systemctl --user enable --now ness-repo' ''
+fake output 'systemctl --user restart ness-repo' ''
+fake output 'systemctl --user restart ness-repo.service' ''
+cd repo
+env NESS_TEST_VERSION=0.1.0
+exec ness init --gate true --base main --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+# A remote a push would reach: it must still hold the init commit at the end.
+exec git init -q --bare $WORK/origin.git
+exec git remote add origin $WORK/origin.git
+exec git push -q origin main
+exec git rev-parse main
+cp stdout $WORK/pushed
+exec git rev-list --count HEAD
+cp stdout $WORK/n0
+
+# Upgrade 0.1.0 -> 0.2.0, no worker unit.
+env NESS_TEST_VERSION=0.2.0
+env NESS_TEST_NOTES=$WORK/notes.md
+mkdir .git/ness
+cp $WORK/failed.json .git/ness/upgrade-failed.json
+exec ness upgrade
+# rejects: a manual upgrade that leaves a failed automatic upgrade's record (doctor's own fix)
+! exists .git/ness/upgrade-failed.json
+# rejects: an upgrade that runs sync but leaves the pin alone, or writes the full version as pin
+grep '^ness = "0.2"$' .ness/ness.toml
+stdout '^pin ness = "0\.2"$'
+# rejects: an upgrade that bumps the pin without running sync
+grep '"ness": "0.2.0"' .ness/lock.json
+# rejects: notes not printed, or printed without their Running sessions part (R-UPD-063)
+stdout 'ness 0\.2\.0 release notes'
+stdout '### Running sessions'
+stdout 'merge the base branch'
+stdout '^open sessions get an update item from the worker at their next idle point$'
+# rejects: a migration line printed when the store did not migrate
+! stdout 'store schema'
+# rejects: no commit, a commit with another subject, or a partial commit leaving files behind
+stdout '^committed chore\(ness\): upgrade to 0\.2\.0$'
+exec git log -1 --format=%s
+stdout '^chore\(ness\): upgrade to 0\.2\.0$'
+exec git show --name-only --format= HEAD
+stdout '^\.ness/ness\.toml$'
+stdout '^\.ness/lock\.json$'
+exec git status --porcelain
+! stdout .
+exec git rev-list --count HEAD
+! cmp stdout $WORK/n0
+cp stdout $WORK/n1
+# rejects: an upgrade that pushes (through the exec seam or around it)
+fake calls 'git push' 0
+exec git -C $WORK/origin.git rev-parse main
+cmp stdout $WORK/pushed
+# rejects: a systemctl call (restart, reload) when no unit exists
+fake calls 'systemctl' 0
+
+# Nothing to change: already at, exit 0, no commit.
+# rejects: an empty commit, or a second commit of the same upgrade
+exec ness upgrade
+stdout '^already at 0\.2\.0$'
+! stdout 'committed'
+exec git rev-list --count HEAD
+cmp stdout $WORK/n1
+exec git status --porcelain
+! stdout .
+
+# A unit already naming this binary: restarted, not rewritten.
+exec ness worker install
+exec git status --porcelain
+! stdout .
+cp $HOME/.config/systemd/user/ness-repo.service $WORK/unit-same
+fake calls 'systemctl --user daemon-reload' 1
+env NESS_TEST_VERSION=0.2.1
+exec ness upgrade
+stdout '^committed chore\(ness\): upgrade to 0\.2\.1$'
+grep '"ness": "0.2.1"' .ness/lock.json
+# rejects: an upgrade that leaves a running worker on the old code
+stdout '^worker restarted$'
+fake calls 'systemctl --user restart ness-repo.service' 1
+# rejects: rewriting and reloading a unit whose binary did not change
+cmp $HOME/.config/systemd/user/ness-repo.service $WORK/unit-same
+fake calls 'systemctl --user daemon-reload' 1
+! stdout 're-pointed'
+
+# A unit naming /old/ness: re-pointed to this binary (reload and restart by the install).
+exec sh -c 'sed -i "s#^ExecStart=.*#ExecStart=\"/old/ness\" worker run#" $HOME/.config/systemd/user/ness-repo.service'
+env NESS_TEST_VERSION=0.2.2
+exec ness upgrade
+stdout '^committed chore\(ness\): upgrade to 0\.2\.2$'
+# rejects: a restart that keeps the worker on /old/ness
+stdout '^worker re-pointed to /'
+! grep '/old/ness' $HOME/.config/systemd/user/ness-repo.service
+exec sh -c 'test "$(grep ^ExecStart= $HOME/.config/systemd/user/ness-repo.service)" = "ExecStart=\"$(readlink -f "$(which ness)")\" worker run"'
+fake calls 'systemctl --user daemon-reload' 2
+# rejects: a re-point without a restart; the brief: the install restarts it, no second restart
+fake calls 'systemctl --user restart ness-repo' 2
+fake calls 'git push' 0
+exec git -C $WORK/origin.git rev-parse main
+cmp stdout $WORK/pushed
+
+# Two minors behind: pin 0.1, lock 0.1.0, binary 0.3.0. Other commands refuse; upgrade runs.
+exec git init -q -b main $WORK/two
+exec git -C $WORK/two commit -q --allow-empty -m init
+cd $WORK/two
+env NESS_TEST_VERSION=0.1.0
+exec ness init --gate true --base main --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+env NESS_TEST_VERSION=0.3.0
+exits 4 ness sync
+# rejects: an upgrade that runs the pin check like every other command (R-CFG-011)
+exec ness upgrade
+grep '^ness = "0.3"$' .ness/ness.toml
+grep '"ness": "0.3.0"' .ness/lock.json
+exec git log -1 --format=%s
+stdout '^chore\(ness\): upgrade to 0\.3\.0$'
+exec git status --porcelain
+! stdout .
+
+# A sync conflict: an edited synced file whose upstream also changed, all committed.
+exec git init -q -b main $WORK/conf
+exec git -C $WORK/conf commit -q --allow-empty -m init
+cp $WORK/conf.toml $WORK/conf/.ness/ness.toml
+cp $WORK/one.md $WORK/conf/.ness/profiles/local/x.md
+cd $WORK/conf
+env NESS_TEST_VERSION=0.1.0
+exec ness sync
+exec git add -A
+exec git commit -q -m 'ness sync'
+cp $WORK/two.md .ness/profiles/local/x.md
+cp $WORK/mine.md docs/x.md
+exec git add -A
+exec git commit -q -m 'edit both'
+exec git rev-list --count HEAD
+cp stdout $WORK/nc
+env NESS_TEST_VERSION=0.2.0
+# rejects: committing over a conflict, or a conflict reported with another exit code or no advice
+exits 3 ness upgrade
+stdout 'conflict docs/x\.md'
+stderr 'resolve them and commit \(git add -A && git commit\), then run ness upgrade again'
+! stdout 'committed'
+exec git rev-list --count HEAD
+cmp stdout $WORK/nc
+exec git log -1 --format=%s
+stdout '^edit both$'
+cmp docs/x.md $WORK/mine.md
+# The user takes the new render, commits, and reruns.
+cp docs/x.md.ness-new docs/x.md
+rm docs/x.md.ness-new
+exec git add -A
+exec git commit -q -m resolve
+exec ness upgrade
+grep '^ness = "0.2"$' .ness/ness.toml
+grep '"ness": "0.2.0"' .ness/lock.json
+exec git status --porcelain
+! stdout .
+fake calls 'git push' 0
+
+# A rerun that finds the upgrade already committed (the user resolved the conflict with sync and
+# committed it all) still restarts the worker.
+# rejects: an already-at path that leaves a running worker on the old code (R-UPD-062)
+fake output 'systemctl --user enable --now ness-conf' ''
+fake output 'systemctl --user restart ness-conf' ''
+fake output 'systemctl --user restart ness-conf.service' ''
+exec ness worker install
+cp $WORK/three.md .ness/profiles/local/x.md
+cp $WORK/mine.md docs/x.md
+exec git add -A
+exec git commit -q -m 'edit both again'
+env NESS_TEST_VERSION=0.2.3
+exits 3 ness upgrade
+! stdout 'worker restarted'
+cp docs/x.md.ness-new docs/x.md
+rm docs/x.md.ness-new
+exec ness sync
+exec git add -A
+exec git commit -q -m resolve
+exec ness upgrade
+stdout '^already at 0\.2\.3$'
+stdout '^worker restarted$'
+fake calls 'systemctl --user restart ness-conf.service' 1
+fake calls 'git push' 0
+
+-- notes.md --
+# Changelog
+
+## [0.2.0](https://example.com/compare/v0.1.0...v0.2.0) (2026-10-30)
+
+### Features
+
+* ness upgrade
+
+### Running sessions
+
+* merge the base branch
+-- conf.toml --
+ness = "0.1"
+project = "conf"
+base = "main"
+gate = "true"
+profiles = ["local"]
+-- conf/.ness/profiles/local/profile.toml --
+name = "local"
+[files]
+"docs/x.md" = { own = "x.md" }
+-- one.md --
+one
+-- two.md --
+two
+-- three.md --
+three
+-- mine.md --
+mine
+-- failed.json --
+{"version": "0.2.0", "cause": "sync stopped on conflicts", "at": "2026-10-08T10:00:00Z"}

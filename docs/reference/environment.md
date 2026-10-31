@@ -22,7 +22,10 @@ the environment.
 | `NESS_SESSION` | The session this process acts as. Set in every session's tab. |
 | `CLAUDECODE`, `CLAUDE_CODE_SESSION_ID` | Mark an agent: the plain renderer, and the client session `ness open --here` promotes |
 | `HERDR_PANE_ID`, `HERDR_TAB_ID`, `HERDR_WORKSPACE_ID` | The terminal pane, tab and workspace. `--here` needs the pane and tab. New tabs open in the workspace. |
-| `XDG_CONFIG_HOME` | Replaces `~/.config` for the secrets file |
+| `XDG_CONFIG_HOME` | Replaces `~/.config` for the secrets file and the machine's project registry, `ness/projects` (R-UPD-031) |
+| `XDG_CACHE_HOME` | Replaces `~/.cache` for the update check cache, `ness/update.json` (R-UPD-050), and the install lock, `ness/install.lock` |
+| `NESS_RELEASES_URL` | The release source, read by `ness` and `install.sh`. Default `https://api.github.com/repos/enea-scaccabarozzi/ness`. ness lists `$NESS_RELEASES_URL/releases?per_page=100`. |
+| `MISE_DATA_DIR`, `GOBIN`, `GOPATH` | Where mise and `go install` put binaries. `ness self-update` does not write a binary under `$MISE_DATA_DIR/installs` (default `~/.local/share/mise/installs`), `$GOBIN`, `$GOPATH/bin` or `~/go/bin` (R-UPD-045). |
 | `GIT_SSH`, `GIT_SSH_COMMAND` | Either set: the `ness integrate` push adds no ssh keepalive option, so your wrapper or command applies |
 
 An agent always gets the plain renderer, whatever `NESS_UI` says, because agents inherit your
@@ -35,6 +38,22 @@ NESS_UI=fancy ness status
 
 ```text title="Output (exit 2)"
 ness: unknown ui mode "fancy"; accepted: auto, rich, plain
+```
+
+## Variables install.sh reads
+
+| Variable | Effect |
+|---|---|
+| `NESS_VERSION` | Install this version, `X.Y.Z` or `vX.Y.Z`, instead of the newest |
+| `NESS_INSTALL_DIR` | The directory to install into. Default `~/.local/bin`. |
+| `NESS_RELEASES_URL` | The release source, as for `ness` |
+
+```sh
+NESS_VERSION=9.9.9 sh install.sh
+```
+
+```text title="Output (exit 1)"
+install.sh: no release v9.9.9 at https://api.github.com/repos/enea-scaccabarozzi/ness
 ```
 
 ## Variables ness sets

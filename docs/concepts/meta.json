@@ -1,5 +1,5 @@
 {
   "title": "Concepts",
   "defaultOpen": true,
-  "pages": ["sessions", "messages-and-worker", "session-record", "profiles-and-sync", "guides-and-sensors", "atoms", "features", "models"]
+  "pages": ["sessions", "messages-and-worker", "session-record", "profiles-and-sync", "guides-and-sensors", "atoms", "features", "models", "compatibility"]
 }

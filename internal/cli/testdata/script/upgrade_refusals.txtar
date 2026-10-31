@@ -1,0 +1,127 @@
+# ness upgrade refuses (exit 4, no commit, pin and lock unchanged, stderr naming the cause)
+# outside the base checkout, off the base branch (another branch or a detached HEAD, both clean to
+# git status), with an uncommitted or untracked change, while the gate or integrate lock is held,
+# and when the project's lock is newer than the binary.
+# covers: R-UPD-060
+cd repo
+env NESS_TEST_VERSION=0.1.0
+exec ness init --gate true --base main --yes
+cp $WORK/f.txt f.txt
+exec git add -A
+exec git commit -q -m 'ness init'
+cp .ness/ness.toml $WORK/toml0
+cp .ness/lock.json $WORK/lock0
+exec git rev-list --count --all
+cp stdout $WORK/n0
+# Every case runs a binary the upgrade would move to.
+env NESS_TEST_VERSION=0.2.0
+
+# rejects: committing a user's half-done work into the upgrade commit
+cp $WORK/edit.txt f.txt
+exits 4 ness upgrade
+stderr 'uncommitted'
+cmp .ness/ness.toml $WORK/toml0
+cmp .ness/lock.json $WORK/lock0
+exec git rev-list --count --all
+cmp stdout $WORK/n0
+exec git checkout -q f.txt
+
+# rejects: a cleanliness check that ignores untracked files (--untracked-files=no)
+cp $WORK/edit.txt u.txt
+exits 4 ness upgrade
+stderr 'uncommitted|untracked'
+cmp .ness/ness.toml $WORK/toml0
+cmp .ness/lock.json $WORK/lock0
+exec git rev-list --count --all
+cmp stdout $WORK/n0
+rm u.txt
+
+# rejects: an upgrade run inside a session worktree, committing on the session branch
+exec git worktree add -q ../wt
+cd ../wt
+exits 4 ness upgrade
+stderr 'run ness upgrade in the base checkout \S*/repo\b'
+cmp .ness/ness.toml $WORK/toml0
+cmp .ness/lock.json $WORK/lock0
+exec git rev-list --count --all
+cmp stdout $WORK/n0
+cd ../repo
+cmp .ness/ness.toml $WORK/toml0
+
+# Review focus 5: another branch checked out is clean to git status --porcelain.
+# rejects: an idle check that only looks at git status, committing the upgrade on other
+exec git checkout -q -b other
+exits 4 ness upgrade
+stderr 'HEAD is on other, not main'
+cmp .ness/ness.toml $WORK/toml0
+exec git rev-list --count --all
+cmp stdout $WORK/n0
+exec git checkout -q main
+
+# Review focus 5: a detached HEAD (bisect, rebase in progress) is clean too.
+# rejects: a branch check that reads "HEAD" as a branch name, or skips the check when detached
+exec git checkout -q --detach
+exits 4 ness upgrade
+stderr 'HEAD is detached'
+cmp .ness/ness.toml $WORK/toml0
+cmp .ness/lock.json $WORK/lock0
+exec git rev-list --count --all
+cmp stdout $WORK/n0
+exec git checkout -q main
+exec git status --porcelain
+! stdout .
+
+# A lock written by a newer ness (0.3.0) under binary 0.2.0, committed so the tree is clean.
+# rejects: an upgrade that downgrades the lock to the running binary
+exec sh -c 'sed -i "s/\"ness\": \"0\.1\.0\"/\"ness\": \"0.3.0\"/" .ness/lock.json'
+grep '"ness": "0.3.0"' .ness/lock.json
+exec git commit -q -am 'newer lock'
+cp .ness/lock.json $WORK/lock3
+exec git rev-list --count --all
+cp stdout $WORK/n3
+exits 4 ness upgrade
+stderr 'newer than this binary'
+cmp .ness/ness.toml $WORK/toml0
+cmp .ness/lock.json $WORK/lock3
+exec git rev-list --count --all
+cmp stdout $WORK/n3
+exec git reset -q --hard HEAD~1
+cmp .ness/lock.json $WORK/lock0
+
+# The integrate lock of the base, in a second project (a held lock lasts until the script ends).
+# rejects: an idle check that holds only the gate lock while an integrate of main runs
+exec git init -q -b main $WORK/repo2
+exec git -C $WORK/repo2 commit -q --allow-empty -m init
+cd $WORK/repo2
+env NESS_TEST_VERSION=0.1.0
+exec ness init --gate true --base main --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+cp .ness/ness.toml $WORK/toml2
+exec git rev-list --count --all
+cp stdout $WORK/n2
+env NESS_TEST_VERSION=0.2.0
+mkdir .git/ness
+lock .git/ness/integrate-main.lock
+exits 4 ness upgrade
+stderr 'integrate'
+cmp .ness/ness.toml $WORK/toml2
+exec git rev-list --count --all
+cmp stdout $WORK/n2
+
+# The gate lock, last in the first project.
+# rejects: an upgrade that commits on the base while an integrate holds the gate
+cd $WORK/repo
+mkdir .git/ness
+lock .git/ness/gate.lock
+exits 4 ness upgrade
+stderr 'an integrate holds the gate lock'
+cmp .ness/ness.toml $WORK/toml0
+cmp .ness/lock.json $WORK/lock0
+exec git rev-list --count --all
+cmp stdout $WORK/n0
+
+-- f.txt --
+tracked
+-- edit.txt --
+changed

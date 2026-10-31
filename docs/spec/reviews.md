@@ -36,3 +36,6 @@ Entries are appended by the reviewer at the end of each plan.
 - R-BLT-052 | review session B (link removed) | 2026-10-09 | 0f28272
 - R-BLT-062 | review session B (link removed) | 2026-10-09 | 0f28272
 - R-BLT-090 | review session B (link removed) | 2026-10-09 | 0f28272
+- R-UPD-091 | review session C (update-path) | 2026-10-31 | fb60856
+- R-UPD-003 | review session C (update-path) | 2026-10-31 | d01260d
+- R-UPD-095 | review session C (update-path) | 2026-10-31 | d01260d

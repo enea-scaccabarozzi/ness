@@ -42,7 +42,8 @@ stdout '^warn\toperator-notify\tnone configured: the operator is not told when a
 exec sh -c 'ness doctor --json | sed -e "s#/[^ \",]*/ness#PATH#g" -e "s#/[^ \",]*/\.home#HOME#g" > ../got.json'
 cmp ../got.json ../golden.json
 # Every check fails at once; each line carries a fix; the tree and refs are untouched.
-env NESS_TEST_VERSION=0.2.0
+# 0.3.0 is two minors past the 0.1 pin (0.2.0 now runs it, R-CFG-011).
+env NESS_TEST_VERSION=0.3.0
 exec sh -c 'printf "[Service]\nExecStart=/usr/local/bin/other-ness worker run\n" > $HOME/.config/systemd/user/ness-repo.service'
 fake herdr version 0.5.0
 fake output 'claude --version' '1.0.0 (Claude Code)'
@@ -56,7 +57,7 @@ snap before
 exec git for-each-ref
 cp stdout ../refs-before
 exits 1 ness doctor
-stdout '^fail\tbinary\t.*0\.2\.0.*0\.1.*ness.*\tfix: '
+stdout '^fail\tbinary\t.*0\.3\.0.*0\.1.*ness.*\tfix: '
 stdout '^fail\tworker-binary\t.*/usr/local/bin/other-ness.*\tfix: ness worker install'
 stdout '^fail\therdr-version\t0\.5\.0.*0\.8\.2\tfix: '
 stdout '^fail\tclient-version\tclaude 1\.0\.0.*2\.1\.294\tfix: '
@@ -138,6 +139,12 @@ requires_tools = ["nonexistent-tool-xyz"]
       "fix": ""
     },
     {
+      "name": "store",
+      "status": "ok",
+      "detail": "schema 12",
+      "fix": ""
+    },
+    {
       "name": "hooks-binary",
       "status": "ok",
       "detail": "hooks resolve PATH",
@@ -147,6 +154,12 @@ requires_tools = ["nonexistent-tool-xyz"]
       "name": "worker-binary",
       "status": "ok",
       "detail": "unit runs PATH",
+      "fix": ""
+    },
+    {
+      "name": "update",
+      "status": "ok",
+      "detail": "no release information yet; next try within 24 h",
       "fix": ""
     },
     {

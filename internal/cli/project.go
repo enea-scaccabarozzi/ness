@@ -15,10 +15,21 @@ import (
 	"github.com/enea-scaccabarozzi/ness/internal/config"
 )
 
-// project is a loaded ness project: the repository root and its parsed configuration.
+// project is a loaded ness project: the repository root and its parsed configuration. head is
+// the part of the file any ness reads (R-UPD-046); file is nil only on locateProject's
+// newer-pin refusal.
 type project struct {
 	root string
+	head config.Head
 	file *config.File
+}
+
+// pin is the project's version pin, read from the parsed file or, without one, from the head.
+func (p *project) pin() string {
+	if p.file != nil {
+		return p.file.Pin()
+	}
+	return p.head.Ness
 }
 
 // repoRoot returns the top of the git checkout containing dir (a worktree is its own top).
@@ -36,19 +47,31 @@ func repoRoot(dir string) (string, error) {
 // loadProject finds the repository, parses .ness/ness.toml and checks the version pin. Every
 // failure is a refusal.
 func loadProject(d Deps) (*project, error) {
-	p, err := locateProject()
+	p, err := locateProject(d)
 	if err != nil {
 		return nil, err
 	}
 	if cerr := config.CheckPin(p.file.Pin(), d.Version); cerr != nil {
-		return nil, refuse("%v (binary: %s)", cerr, executable())
+		return nil, pinRefusal(d, cerr)
 	}
 	return p, nil
 }
 
-// locateProject finds the repository and parses .ness/ness.toml without checking the pin, so
-// doctor can still report a binary that does not match it.
-func locateProject() (*project, error) {
+// pinRefusal is the refusal for a CheckPin error: the cause, the binary and the fix (R-CFG-013).
+func pinRefusal(d Deps, err error) error {
+	var pe *config.PinError
+	if errors.As(err, &pe) {
+		return refuse("%w (binary: %s); fix: %s", pe, d.Executable, pe.Fix())
+	}
+	return refuse("%v (binary: %s)", err, d.Executable)
+}
+
+// locateProject finds the repository and parses .ness/ness.toml. Only a binary older than the
+// pin is refused here, before the strict parse: that file may carry keys only the newer ness
+// knows, and its fix is self-update, not a config edit (R-UPD-020). That refusal comes with a
+// project holding root and head but no file, so doctor still reports the binary and the store.
+// Any other pin mismatch is left to the caller, so doctor can report it too.
+func locateProject(d Deps) (*project, error) {
 	wd, err := os.Getwd()
 	if err != nil {
 		return nil, err
@@ -64,24 +87,19 @@ func locateProject() (*project, error) {
 	if err != nil {
 		return nil, err
 	}
+	head, herr := config.ReadHead(data)
+	if herr == nil {
+		var pe *config.PinError
+		if errors.As(config.CheckPin(head.Ness, d.Version), &pe) && pe.Older {
+			return &project{root: root, head: head}, pinRefusal(d, pe)
+		}
+	}
 	f, err := config.Parse(data)
 	if err != nil {
-		return nil, refuse("%v", err)
+		return nil, refuse("%w", err)
 	}
-	return &project{root: root, file: f}, nil
+	return &project{root: root, head: head, file: f}, nil
 }
-
-func executable() string {
-	p, err := os.Executable()
-	if err != nil {
-		return "unknown path"
-	}
-	return trimDeleted(p)
-}
-
-// trimDeleted drops the " (deleted)" Linux appends to /proc/self/exe once the running binary was
-// replaced on disk, so an upgraded binary is found at its path (R-WRK-009).
-func trimDeleted(p string) string { return strings.TrimSuffix(p, " (deleted)") }
 
 // resolvedConfig is the project's configuration with the applied profiles' defaults
 // (R-PROF-008) and the features they enable (R-PROF-015), and the resolved profiles.

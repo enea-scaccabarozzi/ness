@@ -45,13 +45,13 @@ func (b *bench) alerts() *alerts {
 	return a
 }
 
-// restart replaces the worker by a fresh one over the same store, runtime, clock and channel: a
-// process restart, which remembers nothing of the old one's passes.
+// restart replaces the worker by a fresh one over the same store, runtime, clock, channel and
+// stale check: a process restart, which remembers nothing of the old one's passes.
 func (b *bench) restart() {
 	b.t.Helper()
 	clock := func() time.Time { return b.now }
 	b.w = &worker.Worker{
-		Store: b.s, Runtime: b.rt, Project: "demo-app", Notify: b.w.Notify,
+		Store: b.s, Runtime: b.rt, Project: "demo-app", Notify: b.w.Notify, Stale: b.w.Stale,
 		Clients: map[string]worker.Client{"claude": b.client()},
 		Version: "0.1.0", Now: clock, Log: &worker.Log{Path: b.log, Now: clock, Err: os.Stderr},
 		Stall: 30 * time.Minute, Quiet: 60 * time.Second,

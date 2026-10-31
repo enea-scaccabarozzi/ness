@@ -1,0 +1,48 @@
+# self-update refuses a target that a registered project's base checkout or open session worktree
+# cannot run, naming that ness.toml and its pin and the primary checkout to upgrade; a target every
+# pin accepts installs.
+# covers: R-UPD-046
+mkdir $WORK/bin
+cp stub $WORK/bin/ness
+chmod 755 $WORK/bin/ness
+env NESS_TEST_EXECUTABLE=$WORK/bin/ness
+cd $WORK/repo
+exec ness init --gate true --base main --yes
+grep '^ness = "0\.1"$' .ness/ness.toml
+exec git add -A
+exec git commit -q -m 'ness init'
+cd $WORK
+releases 0.2.0 0.3.0
+
+# Base checkout pinned 0.1, newest 0.3.0 (two minors past it).
+# rejects: no ceiling at all, or a ceiling over the current project only (cwd is outside any)
+exits 4 ness self-update
+stderr 'cannot run .*repo/\.ness/ness\.toml \(ness = "0\.1"\): run ness upgrade in .*repo; open sessions then merge their base$'
+! stdout 'installed'
+cmp $WORK/bin/ness stub
+exec ls $WORK/bin
+cmp stdout ls-ness.txt
+
+# Base at 0.2 (0.3.0 runs it), an open worktree still at 0.1.
+# rejects: a ceiling that reads only the base checkout, or that names the worktree as the place
+# to run ness upgrade
+exec git -C $WORK/repo worktree add -q -b x .worktrees/x
+grep '^ness = "0\.1"$' $WORK/repo/.worktrees/x/.ness/ness.toml
+exec sed -i 's/^ness = "0\.1"$/ness = "0.2"/' $WORK/repo/.ness/ness.toml
+grep '^ness = "0\.2"$' $WORK/repo/.ness/ness.toml
+exits 4 ness self-update
+stderr 'cannot run .*repo/\.worktrees/x/\.ness/ness\.toml \(ness = "0\.1"\): run ness upgrade in \S*/repo; open sessions then merge their base$'
+! stderr 'repo/\.ness/ness\.toml'
+cmp $WORK/bin/ness stub
+
+# rejects: a ceiling applied to the newest release instead of the --version target
+exec ness self-update --version 0.2.0
+stdout '^ness 0\.2\.0 installed at '
+exec $WORK/bin/ness --version
+stdout 'ness version 0\.2\.0'
+
+-- stub --
+#!/bin/sh
+echo ness version 0.1.0
+-- ls-ness.txt --
+ness

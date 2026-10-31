@@ -1,0 +1,60 @@
+# The current binary (0.2.0) runs every command, hook and the worker against the v0.1.0 fixture:
+# its tree, lock, pin and store as v0.1.0 left them, with one open program root s-fixture working
+# in the base checkout. A migration keeps the root's behaviour: the guards still enforce and the
+# program check still fires. A patch release over the fixture adds no store migration.
+# covers: R-UPD-001, R-UPD-002, R-UPD-004, R-UPD-094
+env NESS_TEST_VERSION=0.2.0
+upgradefixture v0.1.0
+cd repo
+# rejects: a fixture that was not committed (the tree must be the release's tracked tree)
+exec git status --porcelain
+! stdout .
+exists .ness/ness.toml
+exists .git/ness/state.sqlite3
+
+# rejects: a patch release that adds a store migration over the fixture's schema
+patchrule
+
+# R-UPD-002: a benign hook passes silently and migrates the store to this binary's schema.
+env NESS_SESSION=s-fixture
+stdin $WORK/benign.json
+exec ness hook pre-tool
+# rejects: a hook that blocks or warns on an N-1 project (pin 0.1, binary 0.2)
+! stderr .
+! stdout .
+store schema CUR
+# rejects: a migration without the backup of the old schema, or a backup with no migration
+exec sh -c 'if [ "$FIXTURE_SCHEMA" -lt "$CUR" ]; then test -e .git/ness/state.sqlite3.bak-v$FIXTURE_SCHEMA; else test ! -e .git/ness/state.sqlite3.bak-v$FIXTURE_SCHEMA; fi'
+# rejects: a migration that drops or rewrites the fixture's root
+store session s-fixture size=program base=main closed=false worktree=
+
+# R-UPD-004: the default gate guard (gate `true` in the fixture) still enforces.
+# rejects: guards lost or disabled by the migration
+stdin $WORK/gate.json
+exits 2 ness hook pre-tool
+stderr 'is the gate'
+
+# R-UPD-002: status, inbox and the worker run against the old project.
+# rejects: a command that refuses an N-1 pin, lock or store
+exec ness status
+exec ness inbox
+fake herdr version 0.8.2
+exec ness worker run --once
+
+# The lock records ness 0.1.0, so sync always plans a lock write (R-SYNC-030); untouched files
+# have no conflict.
+# rejects: sync treating the v0.1.0 managed files as user edits
+exits 1 ness sync --check
+! stdout conflict
+
+# R-UPD-004: the existing program root keeps its program check.
+# rejects: new defaults applied to an existing session (the check skipped after the migration)
+exits 4 ness open --scope x --tier standard --brief $WORK/b.md
+stderr 'no recorded autonomy mode'
+
+-- benign.json --
+{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"ls"}}
+-- gate.json --
+{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"true"}}
+-- b.md --
+b

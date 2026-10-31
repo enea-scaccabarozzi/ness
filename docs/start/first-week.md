@@ -26,9 +26,10 @@ systemctl --user status ness-acme
 `ness status` prints the worker's heartbeat on its last line. The worker beats every 5 s.
 `ness doctor` fails the `worker` check when the last beat is older than 60 s, and prints the fix.
 
-After you upgrade the ness binary, restart the worker with `systemctl --user restart ness-acme`.
-Until you do, `ness doctor` fails `worker` with `running <old version>, this binary is <new
-version>`. If the binary moved to a new path, run `ness worker install` again.
+`ness self-update` re-points each project's worker at the new binary, and the worker restarts on
+the new version within a minute. `ness upgrade` restarts it too. Until it runs the new version,
+`ness doctor` fails `worker` with `running <old version>, this binary is <new version>`. See
+[Upgrade ness](../guides/upgrade.md).
 
 ## Get told on your phone
 

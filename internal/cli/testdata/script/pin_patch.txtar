@@ -1,5 +1,5 @@
-# Within the pinned minor, generated files whose lock records an older patch are accepted:
-# send and inbox run without ness sync.
+# Within the pinned minor or the next one, generated files whose lock records an older version
+# are accepted: send and inbox run without ness sync.
 # covers: R-CFG-014
 cd repo
 env NESS_TEST_VERSION=0.3.2
@@ -11,6 +11,15 @@ stdout '^sent m-'
 env NESS_SESSION=s-aaaaaaaaaaaa
 exec ness inbox
 stdout '\thello$'
+cmp .ness/lock.json ../lock.json
+# rejects: a lock-drift refusal (or a pin check) that requires sync when the binary is one minor ahead
+env NESS_TEST_VERSION=0.4.1
+env NESS_SESSION=s-bbbbbbbbbbbb
+exec ness send --to manager --body again
+stdout '^sent m-'
+env NESS_SESSION=s-aaaaaaaaaaaa
+exec ness inbox
+stdout '\tagain$'
 cmp .ness/lock.json ../lock.json
 
 -- repo/.ness/ness.toml --

@@ -39,21 +39,34 @@ Packages: `internal/config`, `internal/cli`, `cmd/ness`. Sources: §1 (principle
 ## Version pin
 
 - **R-CFG-010** `.ness/ness.toml` MUST carry a version pin of the form `ness = "<major>.<minor>"`
-  (e.g. `ness = "0.3"`), written by `ness init` as the running binary's major.minor.
+  (e.g. `ness = "0.3"`), written by `ness init`, and by `ness upgrade` (R-UPD-061), as the
+  running binary's major.minor.
   Verify: testscript — after `ness init --yes`, the file contains `ness = "<binary major.minor>"`.
-- **R-CFG-011** For a 0.x pin (`ness = "0.N"`), every command (except `--version` and `--help`)
-  MUST run only when the binary is exactly version 0.N (any patch), and refuse otherwise.
-  Verify: testscript — pin `0.3`: binary 0.3.0 and 0.3.7 run; 0.2.9 and 0.4.0 exit 4.
-- **R-CFG-012** For a pin with major ≥ 1 (`ness = "M.N"`), every command (except `--version`
-  and `--help`) MUST run only when the binary's major equals M and its minor is ≥ N; a binary
-  older than the pin, or of another major, MUST refuse.
-  Verify: testscript — pin `1.2`: binary 1.2.0 and 1.5.1 run; 1.1.9 and 2.0.0 exit 4.
-- **R-CFG-013** A version refusal MUST print the pinned range, the running binary's version and
-  the running binary's absolute path.
-  Verify: testscript — stderr contains `0.4`, the binary version string and `$(which ness)`.
-- **R-CFG-014** Within the pinned minor, the binary MUST accept generated files whose lock
-  records an older patch version, without requiring `ness sync`.
-  Verify: testscript — lock records 0.3.0, binary 0.3.2; `ness send`/`ness inbox` succeed.
+- **R-CFG-011** For a 0.x pin `0.N`, a command MUST run only when the binary is `0.N.x` or
+  `0.(N+1).x`, and refuse otherwise. `init`, `--version`, `--help`, `doctor`, `self-update` and
+  `upgrade` skip the check. `ness hook` does not refuse with exit 4: R-UPD-020..023 govern it.
+  Verify: testscript — pin `0.3`: binary 0.3.0, 0.3.7 and 0.4.0 run; 0.2.9 and 0.5.0 exit 4;
+  under 0.5.0 `ness doctor` and `ness upgrade` still run; under 0.5.0 with no `NESS_SESSION` on
+  branch `main`, `ness hook pre-tool` exits 0 with empty stdout and stderr.
+- **R-CFG-012** For a pin with major ≥ 1 (`ness = "M.N"`), every command except those R-CFG-011
+  exempts (`init`, `--version`, `--help`, `doctor`, `self-update`, `upgrade`) MUST run only when
+  the binary's major equals M and its minor is ≥ N; a binary older than the pin, or of another
+  major, MUST refuse. `ness hook` does not refuse with exit 4: R-UPD-020..023 govern it.
+  Verify: testscript — pin `1.2`: binary 1.2.0 and 1.5.1 run; 1.1.9 and 2.0.0 exit 4; under
+  1.1.9 `ness doctor` still runs.
+- **R-CFG-013** A version refusal MUST print the pinned range, the running binary's version, the
+  running binary's absolute path and the fix, from the one string `config.PinError.Fix()` that
+  the hooks print too: a binary older than the pin gets `ness self-update`; a pin older than the
+  binary's minor − 1 gets `run ness upgrade in the base checkout; open sessions then merge their
+  base`.
+  Verify: testscript — pin 0.3, binary 0.2.9: stderr contains `pins ness 0.3.x or 0.4.x`,
+  `0.2.9` and `binary: ` followed by the absolute path, and ends `fix: ness self-update`; binary
+  0.5.0: stderr ends `fix: run ness upgrade in the base checkout; open sessions then merge their
+  base`.
+- **R-CFG-014** Within the pinned minor or the next one, the binary MUST accept generated files
+  whose lock records an older version, without requiring `ness sync`.
+  Verify: testscript — lock records 0.3.0, binary 0.3.2; `ness send`/`ness inbox` succeed; lock
+  0.3.0, binary 0.4.1; `send` and `inbox` succeed.
 
 ## `ness init`
 
@@ -77,9 +90,10 @@ Packages: `internal/config`, `internal/cli`, `cmd/ness`. Sources: §1 (principle
 
 ## CLI surface and output
 
-- **R-CFG-030** The binary MUST expose exactly these 17 top-level commands: `init`, `sync`,
+- **R-CFG-030** The binary MUST expose exactly these 21 top-level commands: `init`, `sync`,
   `doctor`, `stats`, `open`, `close`, `status`, `send`, `reply`, `inbox`, `integrate`, `probe`,
-  `post`, `contract`, `worker`, `hook`, `secret` (CX-22).
+  `post`, `contract`, `worker`, `hook`, `secret`, `pick`, `size` (CX-22), `self-update` and
+  `upgrade` (R-UPD-040, R-UPD-060).
   Verify: testscript — `ness --help` command list equals the set; an unknown command exits
   non-zero.
 - **R-CFG-031** Flags removed from the old harness (§5 "Cut") MUST NOT exist: `--reconcile`,
@@ -298,8 +312,11 @@ and R-MOD-008; `models.command_timeout` to 10 s; `models.router_threshold` to 0.
   Verify: testscript — no TTY, no `--gate` → exit 4; stderr names `--gate`.
 - **R-CFG-053** Outside a ness project (no `.ness/ness.toml` from the cwd up to the repo root)
   only `init`, `--version` and `--help` MUST run; every other command MUST refuse, except
-  `ness hook`, which MUST exit 0 silently, and `doctor` (R-DOC-023).
-  Verify: testscript — `ness status` outside → exit 4; `ness hook pre-tool` → exit 0, no output.
+  `ness hook`, which MUST exit 0 silently, `doctor` (R-DOC-023), and `self-update`, which uses
+  the stable channel there (R-UPD-041).
+  Verify: testscript — `ness status` outside → exit 4; `ness hook pre-tool` → exit 0, no output;
+  `ness self-update --check` outside, with stable 0.2.0 and rc 0.3.0-rc.1 released → exit 0 and
+  stdout offers 0.2.0.
 - **R-CFG-054** A command of a disabled feature (`probe` without `probes`, `post` without
   `notify`, `contract` without `contracts`) MUST refuse, naming the feature to enable.
   Verify: testscript — `ness post …` with notify off → exit 4; stderr names `notify`.

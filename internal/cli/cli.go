@@ -21,6 +21,7 @@ import (
 	"github.com/enea-scaccabarozzi/ness/internal/session"
 	"github.com/enea-scaccabarozzi/ness/internal/shell"
 	"github.com/enea-scaccabarozzi/ness/internal/ui"
+	"github.com/enea-scaccabarozzi/ness/internal/update"
 )
 
 // Exit codes (R-CFG-035).
@@ -71,6 +72,15 @@ type Deps struct {
 	TTY bool
 	// Term is what the process knows about its terminal; the zero value is a pipe (plain).
 	Term ui.Term
+	// Registry is the machine registry sync records the project in (R-UPD-031); an empty Path
+	// (no user config directory) turns it off.
+	Registry update.Registry
+	// CacheDir is $XDG_CACHE_HOME/ness, where the release check caches; "" is no cache directory.
+	CacheDir string
+	// Releases is the release source self-update, upgrade and the release check read.
+	Releases update.Source
+	// Executable is this binary's path, " (deleted)" trimmed; the only source of it in cli.
+	Executable string
 	// ui is the renderer this run resolved (R-UI-001), set before any command runs.
 	ui *ui.Settings
 }
@@ -233,12 +243,12 @@ func newRoot(d Deps) *cobra.Command {
 	root.AddCommand(newInitCmd(d), newSyncCmd(d), newHookCmd(d), newSendCmd(d), newInboxCmd(d), newReplyCmd(d),
 		newOpenCmd(d), newStatusCmd(d), newSizeCmd(d), newIntegrateCmd(d), newCloseCmd(d), newDoctorCmd(d),
 		newWorkerCmd(d), newPostCmd(d), newContractCmd(d), newProbeCmd(d), newStatsCmd(d), newSecretCmd(d),
-		newPickCmd(d))
+		newPickCmd(d), newSelfUpdateCmd(d), newUpgradeCmd(d))
 	root.InitDefaultHelpCmd()
 	if h, _, err := root.Find([]string{"help"}); err == nil && h != root {
 		h.Hidden = true // the rich help lists available commands; plain's template below does the same
 	}
-	// cobra lists the help command even when hidden; the template stops that so exactly the eighteen show.
+	// cobra lists the help command even when hidden; the template stops that so only the available commands show.
 	root.SetUsageTemplate(strings.Replace(root.UsageTemplate(), `(or .IsAvailableCommand (eq .Name "help"))`,
 		`.IsAvailableCommand`, 1))
 	return root

@@ -1,0 +1,99 @@
+# A live root whose worktree lock (0.1.0) is behind its base main (0.2.0) gets one update request
+# from the worker at an idle point, carrying the versions, the Running-sessions notes and the action;
+# a busy pane gets none, a second pass and a pass after the merge add none, and a root gets no fyi
+# copy of its own. Session-start in the worktree prints the behind-base line until the merge.
+# covers: R-UPD-070, R-UPD-072
+env NESS_TEST_VERSION=0.2.0
+env NESS_TEST_NOTES=$WORK/notes.md
+env NESS_TEST_NOW=2026-10-31T10:00:00Z
+cd repo
+exec ness init --gate true --base main --yes
+grep '"ness": "0.2.0"' .ness/lock.json
+exec git add -A
+exec git commit -q -m 'ness init'
+# The old state: the lock records 0.1.0. The root's worktree is cut from this commit.
+exec sed -i 's/"ness": "0.2.0"/"ness": "0.1.0"/' .ness/lock.json
+grep '"ness": "0.1.0"' .ness/lock.json
+exec git commit -q -am 'old lock'
+exec ness open --root --scope r --tier standard --brief ../b.md
+store last-session R
+store session $R base=main
+store get $R agent AR
+store get $R worktree WT
+grep '"ness": "0.1.0"' $WT/.ness/lock.json
+# main moves ahead to 0.2.0.
+exec sed -i 's/"ness": "0.1.0"/"ness": "0.2.0"/' .ness/lock.json
+exec git commit -q -am 'new lock'
+store items operator 0
+
+# rejects: an item sent while the agent works (it would interrupt mid-turn).
+fake herdr status $AR working
+exec ness worker run --once
+store items $R 0
+
+# Idle: one self-addressed request.
+fake herdr status $AR idle
+exec ness worker run --once
+store items $R 1
+store last $R ITEM
+# rejects: an item sent as fyi or from the operator instead of a self-addressed request.
+store item $ITEM sender=$R recipient=$R intent=request
+# rejects: a root's fyi copy walked up to the operator (a root gets none for itself, R-UPD-071).
+store items operator 0
+exec sh -c 'NESS_SESSION=$R ness inbox --unread'
+# rejects: a body without the pinned versions line, the base name, or the sync check step.
+stdout 'ness update: this worktree''s ness files are 0\.1\.0; main has 0\.2\.0\.'
+stdout '1\. git merge main'
+stdout '2\. ness sync --check \(expect exit 0\)'
+stdout '3\. re-load these skills: '
+# rejects: notes left out (the request carries the Running-sessions notes between the versions).
+stdout 'Running sessions notes:'
+stdout 'merge the base branch'
+
+# rejects: a dedup that only skips unread items, or no dedup at all (once per version pair).
+exec ness worker run --once
+store items $R 1
+
+# Session-start in the stale worktree names both versions and the base.
+cd $WT
+env NESS_SESSION=$R
+stdin $WORK/startup.json
+exec ness hook session-start
+# rejects: a line compared against the primary checkout's lock, or no line at all.
+stdout -count=1 '^ness: this worktree.s ness files are 0\.1\.0 and main has 0\.2\.0: merge main, run ness sync --check \(expect exit 0\), re-load the changed skills \(your inbox has the list\)$'
+
+# After the merge the worktree is current: no line and no further item.
+exec git merge -q main
+grep '"ness": "0.2.0"' .ness/lock.json
+stdin $WORK/startup.json
+exec ness hook session-start
+# rejects: a line printed whenever the worktree had once been behind.
+! stdout 'ness files are'
+cd $WORK/repo
+env NESS_SESSION=
+# rejects: an item for any session that ever lagged, or one compared against a stale cached base.
+exec ness worker run --once
+store items $R 1
+
+-- b.md --
+b
+-- startup.json --
+{"hook_event_name":"SessionStart","source":"startup","session_id":"c0ffee"}
+-- notes.md --
+# Changelog
+
+## [0.2.0](https://example.com/compare/v0.1.0...v0.2.0) (2026-10-30)
+
+### Features
+
+* ness upgrade
+
+### Running sessions
+
+* merge the base branch
+
+## [0.1.0](https://example.com/compare/v0.0.1...v0.1.0) (2026-10-01)
+
+### Features
+
+* first

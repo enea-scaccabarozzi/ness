@@ -89,6 +89,7 @@ func runInit(d Deps, o initOpts) error {
 	if cerr := errors.Join(err, rootFS.Close()); cerr != nil {
 		return cerr
 	}
+	record(d, &project{root: root, file: file})
 	report(d, plan)
 	err = syncExit(plan, false)
 	nextSteps(d, o.project, err)

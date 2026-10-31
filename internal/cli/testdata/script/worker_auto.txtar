@@ -1,0 +1,269 @@
+# The worker's unattended path: it runs the daily check whatever auto is; with auto = "install"
+# it self-updates under the machine install lock only when every registered project has
+# auto = "install" (else it logs the veto once); it upgrades its own project at the idle point
+# whatever the other projects say, waits silently before it, records a failure after it once per
+# cause and shows it in doctor and the root's session-start until a pass succeeds; a project that
+# does not upgrade itself sends each open root one fyi per version pair.
+# covers: R-UPD-050, R-UPD-080, R-UPD-081, R-UPD-082
+mkdir $WORK/bin
+cp stub $WORK/bin/ness
+chmod 755 $WORK/bin/ness
+env NESS_TEST_EXECUTABLE=$WORK/bin/ness
+env NESS_TEST_NOW=2026-10-08T10:00:00Z
+cd repo
+exec ness init --gate true --base main --yes
+cp .ness/ness.toml $WORK/base.toml
+exec sh -c 'cat $WORK/base.toml $WORK/notify.toml > .ness/ness.toml'
+exec git add -A
+exec git commit -q -m 'ness init'
+
+# --- R-UPD-050: the daily check under notify writes the cache and installs nothing. ---
+# rejects: a worker that checks only under auto = "install", or a notify worker that installs
+releases 0.2.0
+exec ness worker run --once
+exists $HOME/.cache/ness/update.json
+grep '"stable": ?"0\.2\.0"' $HOME/.cache/ness/update.json
+grep -count=1 '^GET /releases' $WORK/releases.log
+cmp $WORK/bin/ness $WORK/stub
+! exists $WORK/bin/ness.prev
+# rejects: auto = "off" read as "no check" (off only hides the result)
+rm $HOME/.cache/ness/update.json
+exec sh -c 'cat $WORK/base.toml $WORK/off.toml > .ness/ness.toml'
+exec git commit -q -am 'auto off'
+exec ness worker run --once
+grep '"stable": ?"0\.2\.0"' $HOME/.cache/ness/update.json
+cmp $WORK/bin/ness $WORK/stub
+
+# --- R-UPD-080 install: the only registered project has auto = "install". ---
+# rejects: an install path never wired into the pass, or one that drops the old binary
+exec sh -c 'cat $WORK/base.toml $WORK/install.toml > .ness/ness.toml'
+exec git commit -q -am 'auto install'
+exec ness worker run --once
+exec $WORK/bin/ness --version
+stdout 'ness version 0\.2\.0'
+grep 0.1.0 $WORK/bin/ness.prev
+# rejects: the same old process installing again on its next pass, over the rollback copy
+releases 0.2.0
+exec ness worker run --once
+cmp $WORK/releases.log $WORK/empty
+grep 0.1.0 $WORK/bin/ness.prev
+
+# --- The install lock held by another process: skipped, silently, without a fetch. ---
+# rejects: an install that ignores install.lock, or that logs the held lock as an error, or
+# that lists the releases before taking the lock
+cp $WORK/stub $WORK/bin/ness
+chmod 755 $WORK/bin/ness
+rm $WORK/bin/ness.prev
+lock $HOME/.cache/ness/install.lock
+releases 0.2.0
+cp $WORK/empty .git/ness/worker.log
+exec ness worker run --once
+cmp $WORK/bin/ness $WORK/stub
+! exists $WORK/bin/ness.prev
+! grep ' error ' .git/ness/worker.log
+cmp $WORK/releases.log $WORK/empty
+
+# --- Veto: a second registered project with auto = "notify" holds the install, said once. ---
+exec git init -q -b main $WORK/repo2
+exec git -C $WORK/repo2 commit -q --allow-empty -m init
+cd $WORK/repo2
+exec ness init --gate true --base main --yes
+cp .ness/ness.toml $WORK/base2.toml
+exec sh -c 'cat $WORK/base2.toml $WORK/notify.toml > .ness/ness.toml'
+exec git add -A
+exec git commit -q -m 'ness init'
+cd $WORK/repo
+cp $WORK/empty .git/ness/worker.log
+# rejects: a veto that reads only this project's auto, or a note logged on every pass
+# (the rule says one line after two passes: --once is one process per pass)
+exec ness worker run --once
+exec ness worker run --once
+cmp $WORK/bin/ness $WORK/stub
+! exists $WORK/bin/ness.prev
+grep -count=1 'auto-install held: .*/repo2 has auto = "notify"' .git/ness/worker.log
+
+# --- R-UPD-081 (1): binary 0.2.0, lock 0.1.0, idle: the upgrade commit. ---
+# rejects: an upgrade held back by repo2's auto = "notify" (only the install is a machine veto)
+# rejects: a worker that restarts its own unit (restart: false) or pushes
+env NESS_TEST_VERSION=0.2.0
+exec git rev-parse HEAD
+cp stdout $WORK/head0
+exec ness worker run --once
+exec git log -1 --format=%s
+stdout '^chore\(ness\): upgrade to 0\.2\.0$'
+exec git status --porcelain
+! stdout .
+! exists .git/ness/upgrade-failed.json
+fake calls 'systemctl --user restart' 0
+fake calls 'git push' 0
+
+# --- R-UPD-081 (2): before the idle point the worker waits silently and records nothing. ---
+# rejects: an upgrade over an untracked file, a failure recorded or logged before the idle point,
+# or a behind fyi sent by a project that upgrades itself
+exec git reset -q --hard HEAD~1
+exec git rev-parse HEAD
+cmp stdout $WORK/head0
+grep '"ness": "0.1.0"' .ness/lock.json
+cp $WORK/empty u.txt
+cp $WORK/empty .git/ness/worker.log
+store add-session s-i r
+exec ness worker run --once
+exec git rev-parse HEAD
+cmp stdout $WORK/head0
+! exists .git/ness/upgrade-failed.json
+! grep 'upgrade' .git/ness/worker.log
+store items s-i 0
+store close-session s-i
+rm u.txt
+
+# --- R-UPD-081 (3): a sync conflict after the idle point, two passes. ---
+exec git init -q -b main $WORK/conf
+exec git -C $WORK/conf commit -q --allow-empty -m init
+cp $WORK/conf.toml $WORK/conf/.ness/ness.toml
+cp $WORK/one.md $WORK/conf/.ness/profiles/local/x.md
+cd $WORK/conf
+env NESS_TEST_VERSION=0.1.0
+exec ness sync
+exec git add -A
+exec git commit -q -m 'ness sync'
+cp $WORK/two.md .ness/profiles/local/x.md
+cp $WORK/mine.md docs/x.md
+exec git add -A
+exec git commit -q -m 'edit both'
+exec git rev-parse HEAD
+cp stdout $WORK/headc
+env NESS_TEST_VERSION=0.2.0
+# rejects: committing over a conflict, no failure record, or the cause logged on every pass
+exec ness worker run --once
+exec ness worker run --once
+exec git rev-parse HEAD
+cmp stdout $WORK/headc
+exists .git/ness/upgrade-failed.json
+grep 'sync stopped on conflicts' .git/ness/upgrade-failed.json
+grep '0\.2\.0' .git/ness/upgrade-failed.json
+grep -count=1 'sync stopped on conflicts' .git/ness/worker.log
+# rejects: a failure record that doctor or the root's session-start does not show
+exec sh -c 'ness doctor; true'
+stdout '^warn\tupdate\tautomatic upgrade to 0\.2\.0 failed.*\tfix: ness upgrade$'
+store add-session s-cr r
+env NESS_SESSION=s-cr
+stdin $WORK/startup.json
+exec ness hook session-start
+stdout 'automatic upgrade to 0\.2\.0 failed'
+env NESS_SESSION=
+
+# --- R-UPD-081 (4): resolved and committed, one pass: the upgrade commit, the record gone. ---
+# rejects: a failure never retried, or a record left after the upgrade succeeded
+cp docs/x.md.ness-new $WORK/render.md
+exec git reset -q --hard
+rm docs/x.md.ness-new
+cp $WORK/render.md docs/x.md
+exec git commit -q -am resolve
+exec ness worker run --once
+exec git log -1 --format=%s
+stdout '^chore\(ness\): upgrade to 0\.2\.0$'
+! exists .git/ness/upgrade-failed.json
+env NESS_SESSION=s-cr
+stdin $WORK/startup.json
+exec ness hook session-start
+! stdout 'automatic upgrade'
+env NESS_SESSION=
+store close-session s-cr
+
+# --- R-UPD-082: auto = "notify", binary 0.2.0, lock 0.1.0, an open root: one fyi per pair. ---
+cd $WORK/repo2
+store add-session s-r r
+# rejects: no fyi for a project that does not upgrade itself, or one fyi per pass
+exec ness worker run --once
+store items s-r 1
+exec ness worker run --once
+store items s-r 1
+store last s-r FYI
+store item $FYI intent=fyi
+env NESS_SESSION=s-r
+exec ness inbox --show $FYI
+stdout 'run ness upgrade in the base checkout'
+stdout '0\.1\.0'
+stdout '0\.2\.0'
+env NESS_SESSION=
+# rejects: auto = "off" read as "no behind fyi" (settled point 11), or a resend once shown
+exec sh -c 'cat $WORK/base2.toml $WORK/off.toml > .ness/ness.toml'
+exec git commit -q -am 'auto off'
+store add-session s-o r
+cp $WORK/failed.json .git/ness/upgrade-failed.json
+exec ness worker run --once
+# rejects: a failure record kept once auto is no longer install
+! exists .git/ness/upgrade-failed.json
+store items s-o 1
+store items s-r 0
+store last s-o OFF
+env NESS_SESSION=s-o
+exec ness inbox --show $OFF
+stdout 'run ness upgrade in the base checkout'
+env NESS_SESSION=
+
+# --- R-UPD-081 (2) again: the gate lock, then the base's integrate lock, held. ---
+# rejects: an idle point that ignores gate.lock
+cd $WORK/repo
+exec git status --porcelain
+! stdout .
+lock .git/ness/gate.lock
+cp $WORK/empty .git/ness/worker.log
+exec ness worker run --once
+exec git rev-parse HEAD
+cmp stdout $WORK/head0
+! exists .git/ness/upgrade-failed.json
+! grep 'upgrade' .git/ness/worker.log
+# rejects: an idle point that ignores integrate-<base>.lock
+cd $WORK/conf
+exec git reset -q --hard HEAD~1
+grep '"ness": "0.1.0"' .ness/lock.json
+exec git rev-parse HEAD
+cp stdout $WORK/headr
+lock .git/ness/integrate-main.lock
+cp $WORK/empty .git/ness/worker.log
+exec ness worker run --once
+exec git rev-parse HEAD
+cmp stdout $WORK/headr
+! exists .git/ness/upgrade-failed.json
+! grep 'upgrade' .git/ness/worker.log
+
+-- stub --
+#!/bin/sh
+echo ness version 0.1.0
+-- empty --
+-- startup.json --
+{"hook_event_name":"SessionStart","source":"startup","session_id":"c0ffee"}
+-- notify.toml --
+
+[update]
+auto = "notify"
+-- off.toml --
+
+[update]
+auto = "off"
+-- install.toml --
+
+[update]
+auto = "install"
+-- conf.toml --
+ness = "0.1"
+project = "conf"
+base = "main"
+gate = "true"
+profiles = ["local"]
+
+[update]
+auto = "install"
+-- conf/.ness/profiles/local/profile.toml --
+name = "local"
+[files]
+"docs/x.md" = { own = "x.md" }
+-- one.md --
+one
+-- two.md --
+two
+-- mine.md --
+mine
+-- failed.json --
+{"version": "0.2.0", "cause": "sync stopped on conflicts", "at": "2026-10-08T10:00:00Z"}

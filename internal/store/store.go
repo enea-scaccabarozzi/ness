@@ -26,9 +26,32 @@ var ErrNewer = errors.New("store schema is newer than this ness")
 // ErrOlder is returned by OpenReadOnly when the store is behind this ness; any ness command migrates it.
 var ErrOlder = errors.New("store schema is older than this ness")
 
+// SchemaError is OpenReadOnly's refusal of a store of another schema than this binary's. It
+// unwraps to ErrNewer or ErrOlder.
+type SchemaError struct {
+	Store, Binary int
+}
+
+func (e *SchemaError) Error() string {
+	if e.Store > e.Binary {
+		return fmt.Sprintf("%v: store schema %d, binary schema %d; upgrade ness", ErrNewer, e.Store, e.Binary)
+	}
+	return fmt.Sprintf("%v: store schema %d, binary schema %d; any ness command migrates it",
+		ErrOlder, e.Store, e.Binary)
+}
+
+// Unwrap returns ErrNewer for a newer store and ErrOlder for an older one.
+func (e *SchemaError) Unwrap() error {
+	if e.Store > e.Binary {
+		return ErrNewer
+	}
+	return ErrOlder
+}
+
 // Store is an open state database.
 type Store struct {
-	db *sql.DB
+	db   *sql.DB
+	path string
 }
 
 // Locate returns the store path of the checkout containing dir: <git-common-dir>/ness/state.sqlite3,
@@ -44,7 +67,8 @@ func Locate(dir string) (string, error) {
 	return filepath.Join(strings.TrimSpace(string(out)), "ness", "state.sqlite3"), nil
 }
 
-// Open opens or creates the store at path and brings its schema to Version.
+// Open opens or creates the store at path and brings its schema to Version, copying an older
+// store to BackupPath first (R-UPD-010).
 //
 // Connection settings, one reason each: journal_mode=WAL, so readers (inbox, status, the
 // worker) never block a writer and a crash cannot corrupt the file; busy_timeout=5000, so a
@@ -52,7 +76,10 @@ func Locate(dir string) (string, error) {
 // _txlock=immediate, so every transaction takes the write lock at BEGIN and two processes can
 // never deadlock upgrading read locks; foreign_keys=ON, so an item can only name sessions that
 // exist. One connection per process keeps the pragmas and the transactions serial.
-func Open(path string) (*Store, error) {
+func Open(path string) (*Store, error) { return open(path, migrations) }
+
+// open is Open with the migrations to bring the schema to, so a test can build an older store.
+func open(path string, migs []string) (*Store, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return nil, err
 	}
@@ -62,11 +89,11 @@ func Open(path string) (*Store, error) {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
-	s := &Store{db: db}
+	s := &Store{db: db, path: path}
 	if err = s.walMode(); err != nil {
 		return nil, errors.Join(err, db.Close())
 	}
-	if err = s.migrate(migrations); err != nil {
+	if err = s.migrate(migs); err != nil {
 		return nil, errors.Join(err, db.Close())
 	}
 	return s, nil
@@ -74,7 +101,7 @@ func Open(path string) (*Store, error) {
 
 // OpenReadOnly opens an existing store without creating, migrating or writing anything, for
 // ness doctor (R-DOC-001). A missing file is fs.ErrNotExist; a store of another schema version is
-// refused: newer wraps ErrNewer, older asks for any ness command to migrate it.
+// refused with a *SchemaError: newer wraps ErrNewer, older asks for any ness command to migrate it.
 func OpenReadOnly(path string) (*Store, error) {
 	if _, err := os.Stat(path); err != nil {
 		return nil, err
@@ -92,10 +119,8 @@ func OpenReadOnly(path string) (*Store, error) {
 	db.SetMaxOpenConns(1)
 	s := &Store{db: db}
 	v, err := s.version()
-	if err == nil && v > Version() {
-		err = fmt.Errorf("%w: store schema %d, binary schema %d; upgrade ness", ErrNewer, v, Version())
-	} else if err == nil && v < Version() {
-		err = fmt.Errorf("%w: store schema %d, binary schema %d; any ness command migrates it", ErrOlder, v, Version())
+	if err == nil && v != Version() {
+		err = &SchemaError{Store: v, Binary: Version()}
 	}
 	if err != nil {
 		return nil, errors.Join(err, db.Close())

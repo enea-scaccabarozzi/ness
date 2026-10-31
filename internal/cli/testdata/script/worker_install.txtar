@@ -59,4 +59,6 @@ exec ness worker install
 exec ness worker uninstall
 ! exists $HOME/.config/systemd/user/ness-repo.service
 fake calls 'systemctl --user disable --now ness-repo' 1
+# doctor may write the update cache (R-UPD-050); nothing else under HOME changes.
+rm $HOME/.cache
 samesnap home0 $HOME

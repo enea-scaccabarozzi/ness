@@ -1,0 +1,38 @@
+# A release candidate counts as its release for the release notes: a binary X.Y.Z-rc.N prints
+# the X.Y.Z notes, and a lock of X.Y.Z-rc.N with binary X.Y.Z prints none.
+# covers: R-SYNC-032, R-SYNC-033
+cd repo
+env NESS_TEST_NOTES=$WORK/notes.md
+env NESS_TEST_VERSION=0.1.0
+exec ness init --gate true --base main --yes
+grep '"ness": "0.1.0"' .ness/lock.json
+# rejects: plain semver order, where 0.2.0-rc.1 < 0.2.0 drops the 0.2.0 section
+env NESS_TEST_VERSION=0.2.0-rc.1
+exec ness sync
+stdout 'ness 0.2.0 release notes'
+stdout 'rc-carried instruction'
+! stdout '0\.1\.0 release notes'
+grep '"ness": "0.2.0-rc.1"' .ness/lock.json
+# rejects: a lower bound left as the rc, which reprints the 0.2.0 notes after the release
+env NESS_TEST_VERSION=0.2.0
+exec ness sync
+! stdout 'release notes'
+
+-- notes.md --
+# Changelog
+
+## [0.2.0](https://example.com/compare/v0.1.0...v0.2.0) (2026-10-30)
+
+### Features
+
+* update path
+
+### Running sessions
+
+* rc-carried instruction
+
+## [0.1.0] (2026-10-01)
+
+### Running sessions
+
+* first
