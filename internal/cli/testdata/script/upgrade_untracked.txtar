@@ -1,0 +1,90 @@
+# ness upgrade refuses an untracked file at a path ness sync writes, and ignores any other
+# untracked file: the upgrade runs and leaves it untracked, out of the upgrade commit, while the
+# files the sync creates and deletes are in it.
+# covers: R-UPD-060
+cd repo
+env NESS_TEST_VERSION=0.1.0
+exec ness init --gate true --base main --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+env NESS_TEST_VERSION=0.2.0
+
+# A synced file untracked by hand: the sync would adopt it into the upgrade commit.
+# rejects: a cleanliness check that ignores every untracked file
+exec git rm -q --cached .claude/agents/ness-review.md
+exec git commit -q -m 'untrack a synced file'
+cp .ness/ness.toml $WORK/toml0
+exec git rev-list --count HEAD
+cp stdout $WORK/n0
+exits 4 ness upgrade
+stderr '^ness: untracked \.claude/agents/ness-review\.md in \S*/repo is a path ness sync writes; commit or remove it, then run ness upgrade$'
+cmp .ness/ness.toml $WORK/toml0
+exec git rev-list --count HEAD
+cmp stdout $WORK/n0
+exec git add .claude/agents/ness-review.md
+exec git commit -q -m 'track it again'
+
+# An untracked file unrelated to ness.
+# rejects: a refusal on any untracked file, or an upgrade commit that sweeps it in (git add -A)
+cp $WORK/guide.md guide.md
+exec ness upgrade
+stdout '^committed chore\(ness\): upgrade to 0\.2\.0$'
+exec git show --name-only --format= HEAD
+stdout '^\.ness/ness\.toml$'
+! stdout 'guide\.md'
+exec git status --porcelain
+stdout '^\?\? guide\.md$'
+# rejects: the unrelated file counted as a change, so a rerun commits or never says already at
+exec ness upgrade
+stdout '^already at 0\.2\.0$'
+exec git status --porcelain
+stdout '^\?\? guide\.md$'
+
+# The sync creates docs/y.md and deletes docs/z.md (a local profile changed in a commit), with an
+# unrelated untracked file present: both land in the upgrade commit, guide.md stays out.
+# rejects: staging only tracked changes (git add -u), which leaves the new file out and the tree dirty
+exec git init -q -b main $WORK/prof
+exec git -C $WORK/prof commit -q --allow-empty -m init
+cd $WORK/prof
+cp $WORK/prof.toml .ness/ness.toml
+cp $WORK/z-profile.toml .ness/profiles/local/profile.toml
+env NESS_TEST_VERSION=0.1.0
+exec ness sync
+exists docs/z.md
+exec git add -A
+exec git commit -q -m 'ness sync'
+cp $WORK/y-profile.toml .ness/profiles/local/profile.toml
+exec git commit -q -am 'render y, not z'
+cp $WORK/guide.md guide.md
+env NESS_TEST_VERSION=0.2.0
+exec ness upgrade
+stdout '^committed chore\(ness\): upgrade to 0\.2\.0$'
+exec git show --name-status --no-renames --format= HEAD
+stdout '^A\tdocs/y\.md$'
+stdout '^D\tdocs/z\.md$'
+! stdout 'guide\.md'
+exec git status --porcelain
+cmp stdout $WORK/only-guide.txt
+
+-- prof.toml --
+ness = "0.1"
+project = "prof"
+base = "main"
+gate = "true"
+profiles = ["local"]
+-- prof/.ness/profiles/local/z.md --
+zed
+-- prof/.ness/profiles/local/y.md --
+why
+-- z-profile.toml --
+name = "local"
+[files]
+"docs/z.md" = { own = "z.md" }
+-- y-profile.toml --
+name = "local"
+[files]
+"docs/y.md" = { own = "y.md" }
+-- only-guide.txt --
+?? guide.md
+-- guide.md --
+notes unrelated to ness

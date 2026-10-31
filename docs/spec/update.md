@@ -115,7 +115,9 @@ no open points.
   error `no stable release`; rc with 0.3.0-rc.2 and 0.3.0 → 0.3.0; rc.10 beats rc.9. Testscript
   `self_update` — `ness self-update` installs 0.2.0 (`ness 0.2.0 installed at`), `--channel rc`
   installs 0.3.0-rc.1, and with only 0.1.0 released stdout is
-  `ness 0.1.0 is the latest on channel stable`.
+  `ness 0.1.0 is the latest on channel stable`; installed 0.2.0-rc.1, with and without `--check`,
+  `ness 0.2.0-rc.1 is newer than the latest stable (0.1.0)`; there `--version 0.1.0 --check`
+  prints `ness 0.2.0-rc.1 is newer than 0.1.0`.
 - **R-UPD-041** The channel MUST be `--channel`, else the current project's `[update] channel`,
   else `stable`.
   Verify: testscript `self_update` — outside a project, no flag → 0.2.0; in a project with
@@ -192,8 +194,9 @@ no open points.
   `ok` otherwise. With `check = false` or `auto = "off"` it shows no result.
   Verify: testscript `update_notice` — release 0.2.0, installed 0.1.0: stdout has
   `warn<TAB>update<TAB>ness 0.2.0 available (installed 0.1.0)<TAB>fix: ness self-update`;
-  installed 0.2.0: `ok<TAB>update<TAB>`; `auto = "off"` and `check = false` each:
-  `ok<TAB>update<TAB>check off` and no version offered.
+  installed 0.2.0: `ok<TAB>update<TAB>`; installed 0.4.0-rc.1 with stable 0.3.0 cached:
+  `ok<TAB>update<TAB>ness 0.4.0-rc.1 is newer than the latest stable (0.3.0)`; `auto = "off"`
+  and `check = false` each: `ok<TAB>update<TAB>check off` and no version offered.
 - **R-UPD-053** A root's session-start MUST print
   `ness X.Y.Z available (installed A.B.C): ness self-update` when the cache offers a newer version
   and the project has `check = true` and `auto` other than `off`. A child gets no such line.
@@ -205,26 +208,40 @@ no open points.
 ## Upgrade
 
 - **R-UPD-060** `ness upgrade` MUST refuse outside the base checkout, when HEAD is not the base
-  branch, with any uncommitted or untracked change, while the gate lock or the base's integrate
-  lock is held, and when the project's lock is newer than the binary.
+  branch, with any uncommitted change to a tracked file or an untracked file at a path the sync
+  writes, while the gate lock or the base's integrate lock is held, and when the project's lock
+  is newer than the binary. Other untracked files are not refused and stay out of the upgrade
+  commit.
   Verify: testscript `upgrade_refusals` — each case exits 4, adds no commit, leaves the pin
   unchanged, and stderr names the cause: run from a session worktree
   (`run ness upgrade in the base checkout <path>`); HEAD on `other` (`HEAD is on other, not
-  main`); a detached HEAD (`HEAD is detached`); an uncommitted file (`uncommitted`); an untracked
-  file; `gate.lock` held; `integrate-main.lock` held; a lock recording 0.3.0 under binary 0.2.0
-  (`newer than this binary`).
+  main`); a detached HEAD (`HEAD is detached`); an uncommitted file (`uncommitted`); `gate.lock`
+  held; `integrate-main.lock` held; a lock recording 0.3.0 under binary 0.2.0
+  (`newer than this binary`). Testscript `upgrade_untracked` — a synced file untracked by hand
+  exits 4 with `untracked <path> in <primary> is a path ness sync writes` and no commit; an
+  untracked `guide.md` does not refuse, stays out of the upgrade commit and stays `?? guide.md`,
+  and a rerun prints `already at 0.2.0`; a local profile changed to render `docs/y.md` instead of
+  `docs/z.md`, with `?? guide.md` present: the upgrade commit has `A docs/y.md` and
+  `D docs/z.md`, and `git status --porcelain` is only `?? guide.md`.
 - **R-UPD-061** `ness upgrade` MUST migrate the store (R-UPD-010), set the pin to the binary's
-  major.minor, run `ness sync`, and commit everything with `chore(ness): upgrade to X.Y.Z`. It
-  never pushes. It skips the pin check (R-CFG-011), so it runs on a pin two minors behind. On a
+  major.minor, run `ness sync`, and commit what they changed with
+  `chore(ness): upgrade to X.Y.Z`. It never pushes. It skips the pin check (R-CFG-011), so it runs on a pin two minors behind. On a
   sync conflict it stops before the commit with exit 3 and says to resolve the conflicts and
-  commit, then run `ness upgrade` again. With nothing to change it prints `already at X.Y.Z`,
-  commits nothing and exits 0.
+  commit, then run `ness upgrade` again. When git refuses the commit (a commit-msg hook), it
+  leaves the upgrade staged and exits 4 with one line: `the upgrade is staged but git commit
+  refused it (<first line of git's stderr>): commit the staged files with your project's message,
+  then run ness upgrade again`. With nothing to change it prints `already at X.Y.Z`, commits
+  nothing and exits 0.
   Verify: testscript `upgrade` — init under 0.1.0, upgrade under 0.2.0: `ness = "0.2"` in
   `ness.toml`, `"ness": "0.2.0"` in `lock.json`, last commit subject
   `chore(ness): upgrade to 0.2.0`, `git status --porcelain` empty, no `git push` in the fake exec
   log; a second run prints `already at 0.2.0`, exits 0 and adds no commit; pin 0.1 under 0.3.0
   succeeds with pin `"0.3"`; a sync conflict exits 3, adds no commit, and stderr says
   `resolve them and commit`, then `run ness upgrade again`.
+  Testscript `upgrade_commit_refused` — a commit-msg hook rejecting `chore(ness)` with first line
+  `scope ness is not allowed`: exit 4, stderr is that one line with the hook's first line only, no
+  commit, `.ness/ness.toml` and `.ness/lock.json` staged; after a manual commit a rerun prints
+  `already at 0.2.0`.
 - **R-UPD-062** `ness upgrade` MUST restart the project's worker when its unit exists,
   re-pointing it first when its binary path changed.
   Verify: testscript `upgrade` — a unit already naming this binary: the fake `systemctl` calls
@@ -276,8 +293,10 @@ no open points.
   logged only when the cause changes, retried on each pass, and shown in doctor and in the root's
   session-start until it succeeds.
   Verify: testscript `worker_auto` — binary 0.2.0, lock 0.1.0: (1) idle → last commit
-  `chore(ness): upgrade to 0.2.0`, no `upgrade-failed.json`; (2) an untracked file, then
+  `chore(ness): upgrade to 0.2.0`, no `upgrade-failed.json`; (2) an uncommitted change, then
   `gate.lock` held → no commit, no `upgrade-failed.json`, no `upgrade` line in `worker.log`;
+  (5) an untracked `guide.md` and a profile tool missing from PATH → `upgrade-failed.json`
+  names the tool and `worker.log` names it once;
   (3) a sync conflict, two passes → no commit, `upgrade-failed.json` holds
   `sync stopped on conflicts`, `worker.log` has exactly one line naming it, doctor shows
   `warn<TAB>update<TAB>automatic upgrade to 0.2.0 failed` and the root's session-start

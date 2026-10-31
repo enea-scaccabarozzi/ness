@@ -98,13 +98,13 @@ fake calls 'systemctl --user restart' 0
 fake calls 'git push' 0
 
 # --- R-UPD-081 (2): before the idle point the worker waits silently and records nothing. ---
-# rejects: an upgrade over an untracked file, a failure recorded or logged before the idle point,
+# rejects: an upgrade over an uncommitted change, a failure recorded or logged before the idle point,
 # or a behind fyi sent by a project that upgrades itself
 exec git reset -q --hard HEAD~1
 exec git rev-parse HEAD
 cmp stdout $WORK/head0
 grep '"ness": "0.1.0"' .ness/lock.json
-cp $WORK/empty u.txt
+exec sh -c 'echo "# wip" >> .gitignore'
 cp $WORK/empty .git/ness/worker.log
 store add-session s-i r
 exec ness worker run --once
@@ -114,7 +114,7 @@ cmp stdout $WORK/head0
 ! grep 'upgrade' .git/ness/worker.log
 store items s-i 0
 store close-session s-i
-rm u.txt
+exec git checkout -q .gitignore
 
 # --- R-UPD-081 (3): a sync conflict after the idle point, two passes. ---
 exec git init -q -b main $WORK/conf
@@ -169,6 +169,22 @@ exec ness hook session-start
 ! stdout 'automatic upgrade'
 env NESS_SESSION=
 store close-session s-cr
+
+# --- R-UPD-081 (5): an unrelated untracked file is no obstacle, so a sync plan failure past the
+# idle point is recorded. Binary 0.3.0, lock 0.2.0, a profile tool missing from PATH. ---
+# rejects: a plan failure behind an untracked file taken for "not idle" and dropped silently
+cp $WORK/tool-profile.toml .ness/profiles/local/profile.toml
+exec git commit -q -am 'require a tool'
+cp $WORK/empty guide.md
+env NESS_TEST_VERSION=0.3.0
+exec ness worker run --once
+exists .git/ness/upgrade-failed.json
+grep 'requires nonexistent-tool-xyz' .git/ness/upgrade-failed.json
+grep -count=1 'requires nonexistent-tool-xyz' .git/ness/worker.log
+rm .git/ness/upgrade-failed.json
+rm guide.md
+exec git reset -q --hard HEAD~1
+env NESS_TEST_VERSION=0.2.0
 
 # --- R-UPD-082: auto = "notify", binary 0.2.0, lock 0.1.0, an open root: one fyi per pair. ---
 cd $WORK/repo2
@@ -257,6 +273,11 @@ profiles = ["local"]
 auto = "install"
 -- conf/.ness/profiles/local/profile.toml --
 name = "local"
+[files]
+"docs/x.md" = { own = "x.md" }
+-- tool-profile.toml --
+name = "local"
+requires_tools = ["nonexistent-tool-xyz"]
 [files]
 "docs/x.md" = { own = "x.md" }
 -- one.md --

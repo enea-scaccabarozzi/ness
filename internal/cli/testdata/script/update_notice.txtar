@@ -70,6 +70,10 @@ env NESS_SESSION=
 env NESS_TEST_VERSION=0.3.0
 exits 1 ness doctor
 stdout '^ok\tupdate\tness 0\.3\.0 is the latest on channel stable'
+# rejects: an installed pre-release newer than the cached stable reported as the latest
+env NESS_TEST_VERSION=0.4.0-rc.1
+exits 1 ness doctor
+stdout '^ok\tupdate\tness 0\.4\.0-rc\.1 is newer than the latest stable \(0\.3\.0\)'
 env NESS_TEST_VERSION=
 
 # auto = "off" hides the result in doctor and the hook, and the cache stays fresh so nothing is fetched.

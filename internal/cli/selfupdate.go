@@ -68,7 +68,7 @@ func runSelfUpdate(d Deps, want, channel string, check bool) error {
 		return refuse("%v", err)
 	}
 	if (want == "" || check) && !newerThan(rel.Version, d.Version) {
-		say(d.Stdout, "ness %s is the latest on channel %s", d.Version, channel)
+		say(d.Stdout, "%s", upToDate(d.Version, channel, rel.Version, want != ""))
 		return nil
 	}
 	if check {
@@ -76,6 +76,19 @@ func runSelfUpdate(d Deps, want, channel string, check bool) error {
 		return nil
 	}
 	return selfInstall(d, rel)
+}
+
+// upToDate says installed needs nothing from channel: newer than its latest release (an rc
+// installed on stable), or the latest. With asked, latest is the --version asked for, not the
+// channel's latest, and a newer installed is only said to be newer than it.
+func upToDate(installed, channel, latest string, asked bool) string {
+	switch {
+	case newerThan(installed, latest) && asked:
+		return fmt.Sprintf("ness %s is newer than %s", installed, latest)
+	case newerThan(installed, latest):
+		return fmt.Sprintf("ness %s is newer than the latest %s (%s)", installed, channel, latest)
+	}
+	return fmt.Sprintf("ness %s is the latest on channel %s", installed, channel)
 }
 
 // checkFix is the command --check offers: with --channel, that channel, not the project's, so

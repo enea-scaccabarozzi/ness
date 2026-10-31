@@ -72,14 +72,19 @@ func (c Cache) Due(now time.Time) bool {
 	return c.CheckedAt.IsZero() || now.Sub(c.CheckedAt) >= CheckEvery
 }
 
+// Latest is the newest cached version on channel: the rc channel has the newer of RC and Stable
+// (R-UPD-040).
+func (c Cache) Latest(channel string) string {
+	if channel == "rc" && newer(c.RC, c.Stable) {
+		return c.RC
+	}
+	return c.Stable
+}
+
 // Offer is the version channel offers above installed, or "" when nothing is newer. The rc
 // channel offers the newer of RC and Stable (R-UPD-040).
 func (c Cache) Offer(channel, installed string) string {
-	best := c.Stable
-	if channel == "rc" && newer(c.RC, best) {
-		best = c.RC
-	}
-	if newer(best, installed) {
+	if best := c.Latest(channel); newer(best, installed) {
 		return best
 	}
 	return ""

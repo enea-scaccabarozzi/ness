@@ -1,0 +1,42 @@
+# A commit-msg hook that rejects the upgrade subject: ness upgrade exits 4 with one line naming the
+# hook's first line and the fix, the upgrade stays staged, and a rerun after the operator's own
+# commit says already at.
+# covers: R-UPD-061
+cd repo
+env NESS_TEST_VERSION=0.1.0
+exec ness init --gate true --base main --yes
+exec git add -A
+exec git commit -q -m 'ness init'
+exec git rev-list --count HEAD
+cp stdout $WORK/n0
+cp $WORK/commit-msg .git/hooks/commit-msg
+chmod 755 .git/hooks/commit-msg
+
+env NESS_TEST_VERSION=0.2.0
+# rejects: the hook's raw output as the only message, or an exit 0 on a refused commit
+exits 4 ness upgrade
+stderr '^ness: the upgrade is staged but git commit refused it \(scope ness is not allowed\): commit the staged files with your project''s message, then run ness upgrade again$'
+! stderr 'allowed scopes'
+! stdout 'committed'
+! stdout 'open sessions get an update item'
+exec git rev-list --count HEAD
+cmp stdout $WORK/n0
+# rejects: an upgrade that unstages or drops its changes when the commit fails
+exec git diff --cached --name-only
+stdout '^\.ness/ness\.toml$'
+stdout '^\.ness/lock\.json$'
+
+# The operator commits with the project's message; the rerun finishes the upgrade.
+exec git commit -q -m 'chore(harness): upgrade ness to 0.2.0'
+exec ness upgrade
+stdout '^already at 0\.2\.0$'
+exec git status --porcelain
+! stdout .
+
+-- commit-msg --
+#!/bin/sh
+if grep -q '^chore(ness)' "$1"; then
+	echo 'scope ness is not allowed'
+	echo 'allowed scopes: harness, api'
+	exit 1
+fi

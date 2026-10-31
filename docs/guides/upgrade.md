@@ -70,6 +70,9 @@ When you are already on the newest release, `self-update` says so and exits 0:
 ness 0.2.0 is the latest on channel stable
 ```
 
+A release candidate installed on the stable channel is newer than anything there, and the line
+says so: `ness 0.2.0-rc.1 is newer than the latest stable (0.1.0)`.
+
 ### When self-update refuses
 
 `self-update` refuses a version that a registered project cannot run (the ceiling, R-UPD-046).
@@ -134,6 +137,16 @@ already at 0.2.0
 A sync conflict stops `ness upgrade` before the commit with exit 3. Resolve the conflicts and
 commit, then run `ness upgrade` again. See [Files ness writes](../reference/files.md).
 
+When git refuses the commit, for example a commit-msg hook that allows only the project's own
+scopes, `ness upgrade` leaves everything staged and exits 4 with the hook's first line:
+
+```text title="Output (exit 4)"
+ness: the upgrade is staged but git commit refused it (scope ness is not allowed): commit the staged files with your project's message, then run ness upgrade again
+```
+
+Commit the staged files with a message the hook accepts, then run `ness upgrade` again: it prints
+`already at X.Y.Z` and restarts the worker if the project has one.
+
 ### When upgrade refuses
 
 `ness upgrade` runs only at a point where nothing else is changing the base checkout (R-UPD-060).
@@ -144,9 +157,13 @@ Each refusal exits 4, commits nothing and leaves the pin as it was:
 | Run from a session worktree | `ness: /home/you/src/acme/.worktrees/x is a session worktree; run ness upgrade in the base checkout /home/you/src/acme` |
 | HEAD on another branch | `ness: HEAD is on other, not main; check out main, then run ness upgrade` |
 | A detached HEAD | `ness: HEAD is detached; check out main, then run ness upgrade` |
-| An uncommitted or untracked file | `ness: uncommitted or untracked changes in /home/you/src/acme (?? notes.txt); commit or remove them, then run ness upgrade` |
+| An uncommitted change | `ness: uncommitted changes in /home/you/src/acme (M notes.txt); commit or remove them, then run ness upgrade` |
+| An untracked file where ness sync writes | `ness: untracked .claude/agents/ness-review.md in /home/you/src/acme is a path ness sync writes; commit or remove it, then run ness upgrade` |
 | An integrate running | `ness: an integrate holds the gate lock; run ness upgrade again when it finishes` |
 | A project newer than the binary | `ness: .ness/lock.json records ness 0.2.0, newer than this binary (0.1.0); run ness self-update` |
+
+Any other untracked file, such as a draft `notes.md`, is no obstacle: `ness upgrade` leaves it
+untracked and out of the upgrade commit.
 
 `ness upgrade` skips the pin check, so it also moves a project pinned two minors behind the
 binary (R-CFG-011).

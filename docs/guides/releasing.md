@@ -12,6 +12,9 @@ and `release-please.yml` builds stable ones.
 ## Prerequisites
 
 - Push access to the ness repository and the `gh` CLI, logged in.
+- The repository setting **Allow GitHub Actions to create and approve pull requests**, under
+  Settings > Actions > General > Workflow permissions. Without it release-please cannot open its
+  pull request.
 - One or more field projects on ness, each with a base checkout that you can commit to.
 - The tools `mise install` puts on your path, goreleaser among them, to try a step locally.
 

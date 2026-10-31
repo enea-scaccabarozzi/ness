@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -92,35 +94,67 @@ func prepareUpgrade(d Deps) (*project, *config.Config, func(), error) {
 	return p, cfg, release, nil
 }
 
-// syncAndCommit syncs and commits every change as the upgrade commit; with nothing to commit it
-// says already at and reports false. A sync conflict stops it before the commit with exit 3.
+// syncAndCommit syncs and commits the tracked changes and the untracked files the sync wrote as
+// the upgrade commit; any other untracked file stays out. With nothing to commit it says already
+// at and reports false. A sync conflict stops it before the commit with exit 3.
 func syncAndCommit(d Deps, p *project) (committed bool, err error) {
 	if serr := runSync(d, p, syncOpts{}); serr != nil {
 		var ee *exitError
 		if errors.As(serr, &ee) && ee.code == ExitConflict {
 			return false, &exitError{code: ExitConflict, err: errors.New("sync stopped on conflicts: resolve them " +
-				"and commit (git add -A && git commit), then run ness upgrade again")}
+				"and commit the ness files (git status lists them), then run ness upgrade again")}
 		}
 		return false, serr
 	}
 	g := session.Git{Exec: d.exec()}
-	dirty, err := g.DirtyFiles(p.root)
+	staged, err := stageUpgrade(d, p)
 	if err != nil {
 		return false, err
 	}
-	if len(dirty) == 0 {
+	if !staged {
 		say(d.Stdout, "already at %s", d.Version)
 		return false, nil
 	}
 	subject := "chore(ness): upgrade to " + d.Version
-	if _, err = g.Out(p.root, "add", "-A"); err != nil {
-		return false, err
-	}
 	if _, err = g.Out(p.root, "commit", "-q", "-m", subject); err != nil {
-		return false, err
+		// A commit-msg hook rejecting the subject is the common case: the operator commits by hand.
+		return false, refuse("the upgrade is staged but git commit refused it (%s): commit the staged files "+
+			"with your project's message, then run ness upgrade again", firstStderrLine(err))
 	}
 	say(d.Stdout, "committed %s", subject)
 	return true, nil
+}
+
+// stageUpgrade stages the tracked changes and the untracked files the sync wrote, and reports
+// whether anything is staged.
+func stageUpgrade(d Deps, p *project) (bool, error) {
+	g := session.Git{Exec: d.exec()}
+	if _, err := g.Out(p.root, "add", "-u"); err != nil {
+		return false, err
+	}
+	written, err := ownUntracked(d, p)
+	if err == nil && len(written) > 0 {
+		_, err = g.Out(p.root, append([]string{"add", "--"}, written...)...)
+	}
+	if err != nil {
+		return false, err
+	}
+	staged, err := g.Out(p.root, "diff", "--cached", "--name-only")
+	return staged != "", err
+}
+
+// firstStderrLine is the first line of the stderr SystemExec appends after the exit status, or
+// the whole error when there is none.
+func firstStderrLine(err error) string {
+	msg := err.Error()
+	var ee *exec.ExitError
+	if errors.As(err, &ee) {
+		if _, rest, ok := strings.Cut(msg, ee.Error()+": "); ok && rest != "" {
+			msg = rest
+		}
+	}
+	line, _, _ := strings.Cut(msg, "\n")
+	return line
 }
 
 // notIdleError is an idle point refusal: a dirty base or a lock held. The worker waits silently.
@@ -128,9 +162,9 @@ type notIdleError struct{ error }
 
 func (e notIdleError) Unwrap() error { return e.error }
 
-// idlePoint refuses unless p is the primary checkout, on cfg.Base, with no uncommitted or
-// untracked change, and no integrate holds the gate lock or the base's integrate lock; it then
-// holds both locks until release.
+// idlePoint refuses unless p is the primary checkout, on cfg.Base, with no uncommitted change and
+// no untracked file where the sync writes, and no integrate holds the gate lock or the base's
+// integrate lock; it then holds both locks until release.
 func idlePoint(d Deps, p *project, cfg *config.Config) (release func(), err error) {
 	primary, err := primaryRoot(p)
 	if err != nil {
@@ -139,8 +173,8 @@ func idlePoint(d Deps, p *project, cfg *config.Config) (release func(), err erro
 	if filepath.Clean(p.root) != filepath.Clean(primary) {
 		return nil, refuse("%s is a session worktree; run ness upgrade in the base checkout %s", p.root, primary)
 	}
-	if cerr := checkBaseClean(session.Git{Exec: d.exec()}, primary, cfg.Base); cerr != nil {
-		return nil, notIdleError{cerr}
+	if cerr := checkBaseClean(d, p, cfg.Base); cerr != nil {
+		return nil, cerr
 	}
 	path, err := store.Locate(primary)
 	if err != nil {
@@ -163,25 +197,65 @@ func idlePoint(d Deps, p *project, cfg *config.Config) (release func(), err erro
 	return func() { target(); gate() }, nil
 }
 
-// checkBaseClean refuses unless primary has base checked out with no uncommitted or untracked
-// change: another branch or a detached HEAD is clean to git status, so it is checked first.
-func checkBaseClean(g session.Git, primary, base string) error {
+// checkBaseClean refuses unless p (the primary checkout) has base checked out with no uncommitted
+// change and no untracked file at a path the sync writes: another branch or a detached HEAD is
+// clean to git status, so it is checked first. Other untracked files are not the upgrade's. Only
+// the refusals are notIdleError: a git or sync plan failure is the worker's to record (R-UPD-081).
+func checkBaseClean(d Deps, p *project, base string) error {
+	g := session.Git{Exec: d.exec()}
+	primary := p.root
 	branch, _ := g.Out(primary, "symbolic-ref", "-q", "--short", "HEAD") //nolint:errcheck // exit 1 is detached
 	switch {
 	case branch == "":
-		return refuse("HEAD is detached; check out %s, then run ness upgrade", base)
+		return notIdleError{refuse("HEAD is detached; check out %s, then run ness upgrade", base)}
 	case branch != base:
-		return refuse("HEAD is on %s, not %s; check out %s, then run ness upgrade", branch, base, base)
+		return notIdleError{refuse("HEAD is on %s, not %s; check out %s, then run ness upgrade", branch, base, base)}
 	}
-	dirty, err := g.DirtyFiles(primary)
+	dirty, err := g.Out(primary, "status", "--porcelain", "--untracked-files=no", "--ignore-submodules=none")
 	if err != nil {
 		return err
 	}
-	if len(dirty) > 0 {
-		return refuse("uncommitted or untracked changes in %s (%s); commit or remove them, then run ness upgrade",
-			primary, dirty[0])
+	if dirty != "" {
+		first, _, _ := strings.Cut(dirty, "\n")
+		return notIdleError{refuse("uncommitted changes in %s (%s); commit or remove them, then run ness upgrade",
+			primary, first)}
+	}
+	own, err := ownUntracked(d, p)
+	if err != nil {
+		return err
+	}
+	if len(own) > 0 {
+		return notIdleError{refuse("untracked %s in %s is a path ness sync writes; commit or remove it, "+
+			"then run ness upgrade", own[0], primary)}
 	}
 	return nil
+}
+
+// ownUntracked lists the untracked files of p at paths ness sync writes, its lock included.
+func ownUntracked(d Deps, p *project) (own []string, err error) {
+	out, err := session.Git{Exec: d.exec()}.Out(p.root, "ls-files", "-z", "--others", "--exclude-standard")
+	if err != nil || out == "" {
+		return nil, err
+	}
+	root, err := os.OpenRoot(p.root)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { err = errors.Join(err, root.Close()) }()
+	plan, err := planSync(d, p, root)
+	if err != nil {
+		return nil, err
+	}
+	writes := map[string]bool{nsync.LockPath: true}
+	for _, f := range plan.Files {
+		writes[f.Path] = true
+	}
+	for _, f := range strings.Split(out, "\x00") {
+		if writes[f] {
+			own = append(own, f)
+		}
+	}
+	return own, nil
 }
 
 // holdLock takes the lock at path; a held one is a refusal saying held.

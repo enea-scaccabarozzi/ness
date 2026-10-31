@@ -113,6 +113,7 @@ func checkUpdate(e *doctorEnv) check {
 		}
 		return warn("update", fmt.Sprintf("ness %s available (installed %s)", v, installed), fix)
 	}
-	return ok("update", fmt.Sprintf("ness %s is the latest on channel %s (checked %s)",
-		installed, e.cfg.Update.Channel, c.CheckedAt.Format(time.DateOnly)))
+	channel := e.cfg.Update.Channel
+	return ok("update", fmt.Sprintf("%s (checked %s)",
+		upToDate(installed, channel, c.Latest(channel), false), c.CheckedAt.Format(time.DateOnly)))
 }

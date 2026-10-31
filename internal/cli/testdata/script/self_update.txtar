@@ -104,6 +104,19 @@ exec ness self-update --check
 stdout '^ness 0\.1\.0 is the latest on channel stable$'
 ! stdout 'available'
 cmp $WORK/bin/ness stub
+# An installed pre-release newer than the latest stable: newer, not the latest.
+# rejects: an rc reported as the latest release on the stable channel
+env NESS_TEST_VERSION=0.2.0-rc.1
+exec ness self-update --check
+stdout '^ness 0\.2\.0-rc\.1 is newer than the latest stable \(0\.1\.0\)$'
+exec ness self-update
+stdout '^ness 0\.2\.0-rc\.1 is newer than the latest stable \(0\.1\.0\)$'
+cmp $WORK/bin/ness stub
+# rejects: --version X --check calling X the channel's latest
+exec ness self-update --version 0.1.0 --check
+stdout '^ness 0\.2\.0-rc\.1 is newer than 0\.1\.0$'
+! stdout 'latest'
+env NESS_TEST_VERSION=
 
 # A registered project whose worker unit runs /old/ness: the install re-points it.
 cd $WORK/repo
